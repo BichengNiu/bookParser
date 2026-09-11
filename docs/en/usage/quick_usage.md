@@ -24,9 +24,9 @@ mineru -p <input_path> -o <output_path>
 > The command line tool will automatically attempt cuda/mps acceleration on Linux and macOS systems. 
 > Windows users who need cuda acceleration should visit the [PyTorch official website](https://pytorch.org/get-started/locally/) to select the appropriate command for their cuda version to install acceleration-enabled `torch` and `torchvision`.
 
-If you need to adjust parsing options through custom parameters, you can also check the more detailed [Command Line Tools Usage Instructions](./cli_tools.md) in the documentation.
+For practical CLI workflows, see the root [CLI Operation Manual](https://github.com/opendatalab/MinerU/blob/master/CLI_MANUAL.md). The complete parameter reference is available in the [Command Line Tools Usage Instructions](./cli_tools.md).
 
-## Advanced Usage via API, WebUI, http-client/server
+## Advanced Usage via API and http-client/server
 
 - FastAPI calls:
   ```bash
@@ -75,17 +75,6 @@ If you need to adjust parsing options through custom parameters, you can also ch
   >
   >HTTP asynchronous call code example: [Python version](https://github.com/opendatalab/MinerU/blob/master/demo/demo.py)
 
-- Start Gradio WebUI visual frontend:
-  ```bash
-  mineru-gradio --server-name 0.0.0.0 --server-port 7860
-  ```
-  >[!TIP]
-  >
-  >- Access `http://127.0.0.1:7860` in your browser to use the Gradio WebUI.
-  >- Without `--api-url`, Gradio starts a reusable local `mineru-api`; with `--api-url`, it reuses an existing local or remote service.
-  >- `--enable-vlm-preload true` makes Gradio start its local `mineru-api` during WebUI startup and wait for VLM preload to finish. It is ignored when `--api-url` points to an existing service.
-  >- The WebUI currently accepts `PDF`, image, `DOCX`, `PPTX`, and `XLSX` uploads.
-
 - Use `mineru-router` for multi-service / multi-GPU orchestration:
   ```bash
   mineru-router --host 0.0.0.0 --port 8002 --local-gpus auto
@@ -111,7 +100,7 @@ If you need to adjust parsing options through custom parameters, you can also ch
   >`hybrid-http-client` requires local pipeline dependencies such as `mineru[pipeline]` and `torch`.
 
 > [!NOTE]
-> All officially supported `vllm/lmdeploy` parameters can be passed to MinerU through command line arguments, including the following commands: `mineru`, `mineru-openai-server`, `mineru-gradio`, `mineru-api`, `mineru-router`.
+> All officially supported `vllm/lmdeploy` parameters can be passed to MinerU through command line arguments, including the following commands: `mineru`, `mineru-openai-server`, `mineru-api`, `mineru-router`.
 > We have compiled some commonly used parameters and usage methods for `vllm/lmdeploy`, which can be found in the documentation [Advanced Command Line Parameters](./advanced_cli_parameters.md).
 
 ## Extending MinerU Functionality with Configuration Files

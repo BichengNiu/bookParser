@@ -5,6 +5,7 @@ from pathlib import Path
 import torch
 
 from .modeling.architectures.base_model import BaseModel
+from mineru.utils.intel_acceleration import compile_torch_module
 
 
 # OCR 推理精度开关：auto 表示 CPU 使用 fp32，非 CPU 自动使用 fp16。
@@ -42,6 +43,12 @@ class BaseOCRV20:
         self.ocr_inference_dtype = self._resolve_inference_dtype(device)
         if self.ocr_inference_dtype == torch.float16:
             self.net.to(dtype=torch.float16)
+        # OpenVINO keeps the PyTorch tensor contract on CPU while compiling
+        # supported graph partitions for the configured Intel device.
+        self.net = compile_torch_module(
+            self.net,
+            model_name=self.__class__.__name__,
+        )
 
     def _to_inference_dtype(self, tensor):
         """将浮点输入 tensor 转为 OCR 推理精度，整型/布尔辅助输入保持原 dtype。"""

@@ -9,15 +9,33 @@ from loguru import logger
 from tqdm import tqdm
 
 from mineru.backend.pipeline.model_list import AtomicModel
+from mineru.model.table.rec.onnxruntime_provider import (
+    build_table_onnx_providers,
+    create_table_onnx_session,
+)
 from mineru.utils.enum_class import ModelPath
+from mineru.utils.intel_acceleration import (
+    ensure_openvino_runtime_libraries,
+    observe_openvino_provider,
+)
 from mineru.utils.models_download_utils import auto_download_and_get_model_root_path
 
 
 class PaddleTableClsModel:
     def __init__(self):
-        self.sess = onnxruntime.InferenceSession(
-            os.path.join(auto_download_and_get_model_root_path(ModelPath.paddle_table_cls), ModelPath.paddle_table_cls)
+        ensure_openvino_runtime_libraries()
+        model_path = os.path.join(
+            auto_download_and_get_model_root_path(ModelPath.paddle_table_cls),
+            ModelPath.paddle_table_cls,
         )
+        self.sess = create_table_onnx_session(
+            model_path,
+            providers=build_table_onnx_providers(
+                onnxruntime.get_available_providers()
+            ),
+            model_name="PaddleTableClsModel",
+        )
+        observe_openvino_provider(self.sess, model_name="PaddleTableClsModel")
         self.less_length = 256
         self.cw, self.ch = 224, 224
         self.std = [0.229, 0.224, 0.225]

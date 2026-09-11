@@ -26,12 +26,21 @@ from onnxruntime import (
 )
 
 from loguru import logger
-from ..onnxruntime_provider import build_table_onnx_providers
+from ..onnxruntime_provider import (
+    build_table_onnx_providers,
+    create_table_onnx_session,
+)
+from mineru.utils.intel_acceleration import (
+    ensure_openvino_runtime_libraries,
+    observe_openvino_provider,
+)
 
 
 class OrtInferSession:
     def __init__(self, config: Dict[str, Any]):
         self.logger = logger
+
+        ensure_openvino_runtime_libraries()
 
         model_path = config.get("model_path", None)
         self._verify_model(model_path)
@@ -40,11 +49,13 @@ class OrtInferSession:
         EP_list = self._get_ep_list()
 
         sess_opt = self._init_sess_opts(config)
-        self.session = InferenceSession(
+        self.session = create_table_onnx_session(
             model_path,
             sess_options=sess_opt,
             providers=EP_list,
+            model_name="SLANetPlus",
         )
+        observe_openvino_provider(self.session, model_name="SLANetPlus")
 
     @staticmethod
     def _init_sess_opts(config: Dict[str, Any]) -> SessionOptions:

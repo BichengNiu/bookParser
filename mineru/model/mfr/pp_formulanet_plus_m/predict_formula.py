@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from mineru.model.utils.pytorchocr.base_ocr_v20 import BaseOCRV20
 from mineru.model.utils.tools.infer import pytorchocr_utility
+from mineru.utils.intel_acceleration import compile_torch_module
 
 from ..utils import build_mfr_batch_groups
 from .processors import (
@@ -55,6 +56,10 @@ class FormulaRecognizer(BaseOCRV20):
         self.device = torch.device(device) if isinstance(device, str) else device
         self.net.to(self.device)
         self.net.eval()
+        self.net = compile_torch_module(
+            self.net,
+            model_name="FormulaRecognizer",
+        )
 
         with open(self.infer_yaml_path, "r", encoding="utf-8") as yaml_file:
             data = yaml.load(yaml_file, Loader=yaml.FullLoader)

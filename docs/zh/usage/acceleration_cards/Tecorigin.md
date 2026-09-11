@@ -41,7 +41,7 @@ docker run -dit --name mineru_docker \
 > - 切换成功后，您可以在命令行前看到`(vllm_env_py310)`的标识，这表示您已成功进入`vllm`的虚拟环境。
 
 执行该命令后，您将进入到Docker容器的交互式终端，您可以直接在容器内运行MinerU相关命令来使用MinerU的功能。
-您也可以直接通过替换`/bin/bash`为服务启动命令来启动MinerU服务，详细说明请参考[通过命令启动服务](https://opendatalab.github.io/MinerU/zh/usage/quick_usage/#apiwebuihttp-clientserver)。
+您也可以通过替换`/bin/bash`为服务启动命令来启动可选服务，详细说明请参考[命令行和服务使用说明](https://opendatalab.github.io/MinerU/zh/usage/quick_usage/)。
 
 
 ## 4. 注意事项
@@ -86,7 +86,7 @@ docker run -dit --name mineru_docker \
       <td>🟢</td>
     </tr>
     <tr>
-      <td rowspan="3">gradio界面(mineru-gradio)</td>
+      <td rowspan="3">CLI</td>
       <td>pipeline</td>
       <td>🟢</td>
     </tr>

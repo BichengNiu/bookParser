@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from ..utils import build_mfr_batch_groups
+from mineru.utils.intel_acceleration import compile_torch_module
 
 
 class MathDataset(Dataset):
@@ -39,6 +40,10 @@ class UnimernetModel(object):
         if not _device_.startswith("cpu"):
             self.model = self.model.to(dtype=torch.float16)
         self.model.eval()
+        self.model = compile_torch_module(
+            self.model,
+            model_name="UnimernetModel",
+        )
 
     @staticmethod
     def _should_pin_memory(device) -> bool:

@@ -367,8 +367,8 @@ MinerU 2.0 集成了我们最新研发的小参数量、高性能多模态文档
 
 **性能优化**
 
-- 通过支持多个pdf文件的batch处理（[脚本样例](demo/batch_demo.py)），提升了批量小文件的解析速度 (与1.0.1版本相比，公式解析速度最高提升超过1400%，整体解析速度最高提升超过500%)
-- 通过优化mfr模型的加载和使用，降低了显存占用并提升了解析速度(需重新执行[模型下载流程](docs/how_to_download_models_zh_cn.md)以获得模型文件的增量更新)
+- 通过支持多个pdf文件的batch处理（脚本样例），提升了批量小文件的解析速度 (与1.0.1版本相比，公式解析速度最高提升超过1400%，整体解析速度最高提升超过500%)
+- 通过优化mfr模型的加载和使用，降低了显存占用并提升了解析速度(需重新执行[模型源配置](../usage/model_source.md)以获得模型文件的增量更新)
 - 优化显存占用，最低仅需6GB即可运行本项目
 - 优化了在mps设备上的运行速度
 
@@ -411,7 +411,7 @@ MinerU 2.0 集成了我们最新研发的小参数量、高性能多模态文档
 
 在这个版本我们重点提升了解析的精度与效率：
 
-**模型能力升级**（需重新执行 [模型下载流程](https://github.com/opendatalab/MinerU/docs/how_to_download_models_zh_cn.md) 以获得模型文件的增量更新）
+**模型能力升级**（需重新执行[模型源配置](../usage/model_source.md)以获得模型文件的增量更新）
 
 - 布局识别模型升级到最新的 `doclayout_yolo(2501)` 模型，提升了layout识别精度
 - 公式解析模型升级到最新的 `unimernet(2501)` 模型，提升了公式识别精度
@@ -475,7 +475,7 @@ MinerU 2.0 集成了我们最新研发的小参数量、高性能多模态文档
 - 集成 [PDF-Extract-Kit 1.0](https://github.com/opendatalab/PDF-Extract-Kit)
   - 加入自研的 `doclayout_yolo` 模型，在相近解析效果情况下比原方案提速10倍以上，可通过配置文件与 `layoutlmv3` 自由切换
   - 公式解析升级至 `unimernet 0.2.1`，在提升公式解析准确率的同时，大幅降低显存需求
-  - 因 `PDF-Extract-Kit 1.0` 更换仓库，需要重新下载模型，步骤详见 [如何下载模型](https://github.com/opendatalab/MinerU/docs/how_to_download_models_zh_cn.md)
+  - 因 `PDF-Extract-Kit 1.0` 更换仓库，需要重新下载模型，步骤详见[模型源配置](../usage/model_source.md)
 
 ### 0.8.1 (2024/09/27)
 

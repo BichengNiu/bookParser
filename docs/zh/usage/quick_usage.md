@@ -24,9 +24,9 @@ mineru -p <input_path> -o <output_path>
 > 命令行工具会在Linux和macOS系统自动尝试cuda/mps加速。Windows用户如需使用cuda加速，
 > 请前往 [Pytorch官网](https://pytorch.org/get-started/locally/) 选择适合自己cuda版本的命令安装支持加速的`torch`和`torchvision`。
 
-如果需要通过自定义参数调整解析选项，您也可以在文档中查看更详细的[命令行工具使用说明](./cli_tools.md)。
+如果需要通过自定义参数调整解析选项，请参考根目录的 [CLI 操作手册](https://github.com/opendatalab/MinerU/blob/master/CLI_MANUAL.md)；完整参数列表可查看[命令行工具说明](./cli_tools.md)。
 
-## 通过api、webui、http-client/server进阶使用
+## 通过api、http-client/server进阶使用
 
 - 通过fast api方式调用：
   ```bash
@@ -75,17 +75,6 @@ mineru -p <input_path> -o <output_path>
   >
   >http异步调用代码示例：[Python版本](https://github.com/opendatalab/MinerU/blob/master/demo/demo.py)
 
-- 启动gradio webui 可视化前端：
-  ```bash
-  mineru-gradio --server-name 0.0.0.0 --server-port 7860
-  ```
-  >[!TIP]
-  > 
-  >- 在浏览器中访问 `http://127.0.0.1:7860` 使用 Gradio WebUI。
-  >- 未传 `--api-url` 时，Gradio 会自动拉起可复用的本地 `mineru-api`；传入 `--api-url` 时则会复用已有本地或远端服务。
-  >- `--enable-vlm-preload true` 会让 Gradio 在 WebUI 启动阶段主动拉起本地 `mineru-api` 并等待 VLM 预加载完成；传入 `--api-url` 时会被忽略。
-  >- WebUI 当前支持上传 `PDF`、图片与 `DOCX`、`PPTX`、`XLSX` 文件。
-
 - 通过 `mineru-router` 进行多服务 / 多 GPU 编排：
   ```bash
   mineru-router --host 0.0.0.0 --port 8002 --local-gpus auto
@@ -111,7 +100,7 @@ mineru -p <input_path> -o <output_path>
   >`hybrid-http-client` 需要本地具备 `mineru[pipeline]` 及 `torch` 等 pipeline 依赖。
 
 > [!NOTE]
-> 所有`vllm/lmdeploy`官方支持的参数都可用通过命令行参数传递给 MinerU，包括以下命令:`mineru`、`mineru-openai-server`、`mineru-gradio`、`mineru-api`、`mineru-router`，
+> 所有`vllm/lmdeploy`官方支持的参数都可用通过命令行参数传递给 MinerU，包括以下命令:`mineru`、`mineru-openai-server`、`mineru-api`、`mineru-router`，
 > 我们整理了一些`vllm/lmdeploy`使用中的常用参数和使用方法，可以在文档[命令行进阶参数](./advanced_cli_parameters.md)中获取。
 
 ## 基于配置文件扩展 MinerU 功能

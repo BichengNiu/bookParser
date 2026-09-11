@@ -26,7 +26,6 @@ services:
             - driver: nvidia
               device_ids: ["0"]  # Modify for multiple GPUs: ["0", "1"]
               capabilities: [gpu]
-
   mineru-api:
     image: mineru:latest
     container_name: mineru-api
@@ -84,35 +83,6 @@ services:
     ipc: host
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ["0"]  # Modify for multiple GPUs: ["0", "1"]
-              capabilities: [gpu]
-
-  mineru-gradio:
-    image: mineru:latest
-    container_name: mineru-gradio
-    restart: always
-    profiles: ["gradio"]
-    ports:
-      - 7860:7860
-    environment:
-      MINERU_MODEL_SOURCE: local
-    entrypoint: mineru-gradio
-    command:
-      --server-name 0.0.0.0
-      --server-port 7860
-      # --enable-api false  # If you want to disable the API, set this to false
-      # --max-convert-pages 20  # If you want to limit the number of pages for conversion, set this to a specific number
-      # parameters for vllm-engine
-      # --gpu-memory-utilization 0.5  # If encountering VRAM shortage, reduce the KV cache size by this parameter; if VRAM issues persist, try lowering it further to `0.4` or below.
-    ulimits:
-      memlock: -1
-      stack: 67108864
-    ipc: host
     deploy:
       resources:
         reservations:

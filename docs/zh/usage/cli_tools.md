@@ -1,5 +1,7 @@
 # 命令行工具使用说明
 
+需要按任务执行解析时，建议先阅读根目录的 [CLI 操作手册](https://github.com/opendatalab/MinerU/blob/master/CLI_MANUAL.md)；本页主要保留完整帮助信息和环境变量参考。
+
 ## 查看帮助信息
 要查看 MinerU 命令行工具的帮助信息，可以使用 `--help` 参数。以下是各个命令行工具的帮助信息示例：
 ```bash
@@ -11,6 +13,7 @@ Options:
   -p, --path PATH                 输入文件路径或目录（必填）
   -o, --output PATH               输出目录（必填）
   --api-url TEXT                  MinerU FastAPI 服务地址；不传时自动拉起本地临时 mineru-api
+  --devices TEXT                  pipeline 后端设备：auto、cpu、gpu、npu 或逗号分隔组合（默认：auto）
   -m, --method [auto|txt|ocr]     解析方法：auto（默认）、txt、ocr（仅用于 pipeline 与 hybrid* 后端）
   -b, --backend [pipeline|vlm-engine|hybrid-engine|vlm-http-client|hybrid-http-client]
                                   解析后端（默认为 hybrid-engine）
@@ -43,31 +46,6 @@ Options:
   --enable-vlm-preload BOOLEAN
                   在 mineru-api 启动阶段预加载本地 VLM 模型
   --help          显示此帮助信息并退出
-```
-```bash
-mineru-gradio --help
-Usage: mineru-gradio [OPTIONS]
-
-Options:
-  --enable-example BOOLEAN        启用示例文件输入(需要将示例文件放置在当前
-                                  执行命令目录下的 `examples` 文件夹中)
-  --enable-http-client BOOLEAN    在后端选项中启用 HTTP 客户端选项
-  --enable-api BOOLEAN            启用 Gradio API 以提供应用程序服务
-  --max-convert-pages INTEGER     设置从 PDF 转换为 Markdown 的最大页数
-  --server-name TEXT              设置 Gradio 应用程序的服务器主机名
-  --server-port INTEGER           设置 Gradio 应用程序的服务器端口
-  --api-url TEXT                  MinerU FastAPI 服务地址；不传时自动拉起可复用的本地
-                                  mineru-api
-  --enable-vlm-preload BOOLEAN    在 Gradio 拉起本地 mineru-api 时预加载本地
-                                  VLM 模型
-  --client-side-output-generation BOOLEAN
-                                  在客户端基于服务端返回的 middle JSON 生成 Markdown
-                                  和 content list
-  --latex-delimiters-type [a|b|all]
-                                  设置在 Markdown 渲染中使用的 LaTeX 分隔符类型
-                                  ('a' 表示 '$' 类型，'b' 表示 '()[]' 类型，
-                                  'all' 表示两种类型都使用)
-  --help                          显示此帮助信息并退出
 ```
 ```bash
 mineru-router --help
@@ -148,12 +126,12 @@ MinerU命令行工具的某些参数存在相同功能的环境变量配置，�
 - `MINERU_LOCAL_API_STARTUP_TIMEOUT_SECONDS`：
     * 用于控制各命令行工具等待本地拉起的 `mineru-api` 进入健康状态的最长时间
     * 默认为 `300` 秒。
-    * 适用于 `mineru` 的临时本地 API、`mineru-gradio` 的 preload 启动，以及 `mineru-router` 托管的本地 worker。
+    * 适用于 `mineru` 的临时本地 API，以及 `mineru-router` 托管的本地 worker。
 
 - `MINERU_TASK_RESULT_TIMEOUT_SECONDS`：
     * 用于控制客户端等待任务完成并进入终态的最长时间。
     * 默认为 `3600` 秒，需设置为大于等于 `1` 的数值。
-    * 适用于 `mineru`、`mineru-gradio` 和 `mineru-router` 等通过 API 客户端轮询任务状态的场景。
+    * 适用于 `mineru`、`mineru-router` 等通过 API 客户端轮询任务状态的场景。
 
 - `MINERU_TASK_RESULT_DOWNLOAD_TIMEOUT_SECONDS`：
     * 用于控制任务完成后获取结果的读取超时时间，包括服务端生成 ZIP 的等待和结果 ZIP 下载。

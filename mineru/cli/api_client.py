@@ -17,7 +17,7 @@ import zipfile
 from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Callable, Optional, Sequence
+from typing import Callable, Mapping, Optional, Sequence
 
 import click
 import httpx
@@ -388,6 +388,7 @@ def _build_local_api_server_env(
     output_root: Path,
     *,
     use_stdin_shutdown_watcher: bool,
+    env_overrides: Mapping[str, str] | None = None,
 ) -> tuple[dict[str, str], tuple[str, ...]]:
     env = os.environ.copy()
     env["MINERU_API_OUTPUT_ROOT"] = str(output_root)
@@ -395,6 +396,8 @@ def _build_local_api_server_env(
         read_max_concurrent_requests(default=DEFAULT_MAX_CONCURRENT_REQUESTS)
     )
     env["MINERU_API_DISABLE_ACCESS_LOG"] = "1"
+    if env_overrides:
+        env.update({str(name): str(value) for name, value in env_overrides.items()})
 
     unset_env_names: list[str] = []
     if use_stdin_shutdown_watcher:
@@ -465,7 +468,12 @@ class TaskStatusSnapshot:
 
 
 class LocalAPIServer:
-    def __init__(self, extra_cli_args: Sequence[str] = ()):
+    def __init__(
+        self,
+        extra_cli_args: Sequence[str] = (),
+        *,
+        env_overrides: Mapping[str, str] | None = None,
+    ):
         self.temp_dir = tempfile.TemporaryDirectory(prefix="mineru-api-client-")
         self.temp_root = Path(self.temp_dir.name)
         self.output_root = self.temp_root / "output"
@@ -476,6 +484,7 @@ class LocalAPIServer:
         self._launch_mode = LOCAL_API_LAUNCH_MODE_SUBPROCESS
         self._managed_process_group_id: int | None = None
         self._use_stdin_shutdown_watcher = False
+        self.env_overrides = dict(env_overrides or {})
 
     def start(self) -> str:
         if self.process is not None:
@@ -495,6 +504,7 @@ class LocalAPIServer:
         env, unset_env_names = _build_local_api_server_env(
             self.output_root,
             use_stdin_shutdown_watcher=self._use_stdin_shutdown_watcher,
+            env_overrides=self.env_overrides,
         )
         if self._launch_mode == LOCAL_API_LAUNCH_MODE_SUBPROCESS:
             stdin_target = subprocess.PIPE

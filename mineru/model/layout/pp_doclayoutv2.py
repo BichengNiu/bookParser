@@ -26,6 +26,7 @@ from transformers.models.rt_detr.modeling_rt_detr import RTDetrForObjectDetectio
 from transformers.utils import ModelOutput
 
 from mineru.utils.bbox_utils import normalize_to_int_bbox
+from mineru.utils.intel_acceleration import compile_torch_module
 
 DEFAULT_IMAGE_SIZE = (800, 800)
 DEFAULT_RESCALE_FACTOR = 1.0 / 255.0
@@ -930,6 +931,10 @@ class PPDocLayoutV2LayoutModel:
         self.model = PPDocLayoutV2ForObjectDetection.from_pretrained(self.model_dir, config=self.config)
         self.model.to(self.device)
         self.model.eval()
+        self.model = compile_torch_module(
+            self.model,
+            model_name="PPDocLayoutV2ForObjectDetection",
+        )
 
     @staticmethod
     def _get_order_seqs(order_logits: torch.Tensor) -> torch.Tensor:

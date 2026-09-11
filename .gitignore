@@ -2,6 +2,8 @@
 *.tar.gz
 *.zip
 venv*/
+.venv/
+.mineru-openvino-cache/
 envs/
 slurm_logs/
 

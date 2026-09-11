@@ -361,8 +361,8 @@ Fixed several compatibility issues
 
 **Performance optimizations**
 
-- Enhanced parsing speed for batches of small files by supporting batch processing of multiple PDF files ([script example](demo/batch_demo.py)), with formula parsing speed improved by up to 1400% and overall parsing speed improved by up to 500% compared to version 1.0.1
-- Reduced memory usage and improved parsing speed by optimizing MFR model loading and usage (requires re-running the [model download process](docs/how_to_download_models_zh_cn.md) to get incremental updates to model files)
+- Enhanced parsing speed for batches of small files by supporting batch processing of multiple PDF files (script example), with formula parsing speed improved by up to 1400% and overall parsing speed improved by up to 500% compared to version 1.0.1
+- Reduced memory usage and improved parsing speed by optimizing MFR model loading and usage (requires re-running the [model source configuration](../usage/model_source.md) to get incremental updates to model files)
 - Optimized GPU memory usage, requiring only 6GB minimum to run this project
 - Improved running speed on MPS devices
 
@@ -405,7 +405,7 @@ This version includes several fixes and improvements to enhance parsing efficien
 
 In this version we have focused on improving parsing accuracy and efficiency:
 
-**Model capability upgrade** (requires re-executing the [model download process](https://github.com/opendatalab/MinerU/blob/master/docs/how_to_download_models_en.md) to obtain incremental updates of model files)
+**Model capability upgrade** (requires re-executing the [model source configuration](../usage/model_source.md) to obtain incremental updates of model files)
 
 - The layout recognition model has been upgraded to the latest `doclayout_yolo(2501)` model, improving layout recognition accuracy.
 - The formula parsing model has been upgraded to the latest `unimernet(2501)` model, improving formula recognition accuracy.
@@ -469,7 +469,7 @@ This is a major new version with extensive code refactoring, addressing numerous
 - Integrated [PDF-Extract-Kit 1.0](https://github.com/opendatalab/PDF-Extract-Kit):
   - Added the self-developed `doclayout_yolo` model, which speeds up processing by more than 10 times compared to the original solution while maintaining similar parsing effects, and can be freely switched with `layoutlmv3` via the configuration file.
   - Upgraded formula parsing to `unimernet 0.2.1`, improving formula parsing accuracy while significantly reducing memory usage.
-  - Due to the repository change for `PDF-Extract-Kit 1.0`, you need to re-download the model. Please refer to [How to Download Models](https://github.com/opendatalab/MinerU/blob/master/docs/how_to_download_models_en.md) for detailed steps.
+  - Due to the repository change for `PDF-Extract-Kit 1.0`, you need to re-download the model. Please refer to the [model source configuration](../usage/model_source.md) for detailed steps.
 
 ### 0.8.1 (2024/09/27)
 

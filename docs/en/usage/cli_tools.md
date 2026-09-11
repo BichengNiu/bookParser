@@ -1,5 +1,7 @@
 # Command Line Tools Usage Instructions
 
+For task-oriented workflows, start with the root [CLI Operation Manual](https://github.com/opendatalab/MinerU/blob/master/CLI_MANUAL.md). This page keeps the complete help output and environment-variable reference.
+
 ## View Help Information
 To view help information for MinerU command line tools, you can use the `--help` parameter. Here are help information examples for various command line tools:
 ```bash
@@ -11,6 +13,7 @@ Options:
   -p, --path PATH                 Input file path or directory (required)
   -o, --output PATH               Output directory (required)
   --api-url TEXT                  MinerU FastAPI base URL; if omitted, `mineru` starts a temporary local `mineru-api`
+  --devices TEXT                  Pipeline devices: auto, cpu, gpu, npu, or comma-separated values (default: auto)
   -m, --method [auto|txt|ocr]     Parsing method: auto (default), txt, ocr (pipeline and hybrid* backend only)
   -b, --backend [pipeline|vlm-engine|hybrid-engine|vlm-http-client|hybrid-http-client]
                                   Parsing backend (default: hybrid-engine)
@@ -45,36 +48,6 @@ Options:
   --enable-vlm-preload BOOLEAN
                   Preload the local VLM model during mineru-api startup.
   --help          Show this message and exit.
-```
-```bash
-mineru-gradio --help
-Usage: mineru-gradio [OPTIONS]
-
-Options:
-  --enable-example BOOLEAN        Enable example files for input. The example
-                                  files to be input need to be placed in the
-                                  `examples` folder within the directory where
-                                  the command is currently executed.
-  --enable-http-client BOOLEAN    Enable http-client backend to link openai-
-                                  compatible servers.
-  --enable-api BOOLEAN            Enable gradio API for serving the
-                                  application.
-  --max-convert-pages INTEGER     Set the maximum number of pages to convert
-                                  from PDF to Markdown.
-  --server-name TEXT              Set the server name for the Gradio app.
-  --server-port INTEGER           Set the server port for the Gradio app.
-  --api-url TEXT                  MinerU FastAPI base URL. If omitted, gradio
-                                  starts a reusable local mineru-api service.
-  --enable-vlm-preload BOOLEAN    Preload the local VLM model when gradio
-                                  starts a local mineru-api service.
-  --client-side-output-generation BOOLEAN
-                                  Generate Markdown and content lists locally
-                                  from server-returned middle JSON.
-  --latex-delimiters-type [a|b|all]
-                                  Set the type of LaTeX delimiters to use in
-                                  Markdown rendering: 'a' for type '$', 'b' for
-                                  type '()[]', 'all' for both types.
-  --help                          Show this message and exit.
 ```
 ```bash
 mineru-router --help
@@ -156,12 +129,12 @@ Here are the environment variables and their descriptions:
 - `MINERU_LOCAL_API_STARTUP_TIMEOUT_SECONDS`:
     * Used to control how long CLI tools wait for a locally started `mineru-api` to become healthy.
     * Default is `300` seconds.
-    * Applies to temporary local API startup in `mineru`, preload startup in `mineru-gradio`, and router-managed local workers.
+    * Applies to temporary local API startup in `mineru` and router-managed local workers.
 
 - `MINERU_TASK_RESULT_TIMEOUT_SECONDS`:
     * Used to control how long clients wait for a task to complete and reach a terminal state.
     * Default is `3600` seconds, and the value must be greater than or equal to `1`.
-    * Applies to task-status polling in `mineru`, `mineru-gradio`, `mineru-router`, and other API-client scenarios.
+    * Applies to task-status polling in `mineru`, `mineru-router`, and other API-client scenarios.
 
 - `MINERU_TASK_RESULT_DOWNLOAD_TIMEOUT_SECONDS`:
     * Used to control the read timeout when retrieving completed task results, including waiting for server-side ZIP generation and downloading the result ZIP.

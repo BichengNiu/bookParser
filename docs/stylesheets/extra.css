@@ -1,4 +1,4 @@
-/* demo 页面嵌入 Gradio，需要隐藏右侧目录列并释放主内容宽度。 */
+/* Keep the documentation content width consistent on demo pages. */
 .md-main__inner:has(.mineru-demo-page) {
   width: min(calc(100% - 3rem), 112rem);
   max-width: none;

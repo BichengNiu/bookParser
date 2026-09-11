@@ -61,7 +61,7 @@ Compared to well-known commercial products domestically and internationally, Min
 - OCR supports detection and recognition of 109 languages
 - Support multiple output formats, such as multimodal and NLP Markdown, reading-order-sorted JSON, and information-rich intermediate formats
 - Support multiple visualization results, including layout visualization, span visualization, etc., for efficient confirmation of output effects and quality inspection
-- Built-in CLI, FastAPI, Gradio WebUI, for local orchestration and multi-service deployment
+- Built-in CLI for local document parsing and batch processing
 - Support pure CPU environment operation, and support GPU(CUDA)/NPU(CANN)/MPS acceleration
 - Compatible with Windows, Linux and Mac platforms
 

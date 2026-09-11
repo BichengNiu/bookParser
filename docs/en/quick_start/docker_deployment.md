@@ -29,14 +29,14 @@ MinerU's Docker uses `vllm/vllm-openai` as the base image, so it includes the `v
 ```bash
 docker run --gpus all \
   --shm-size 32g \
-  -p 30000:30000 -p 7860:7860 -p 8000:8000 -p 8002:8002 \
+  -p 30000:30000 -p 8000:8000 -p 8002:8002 \
   --ipc=host \
   -it mineru:latest \
   /bin/bash
 ```
 
-After executing this command, you will enter the Docker container's interactive terminal with some ports mapped for potential services. You can directly run MinerU-related commands within the container to use MinerU's features.
-You can also directly start MinerU services by replacing `/bin/bash` with service startup commands. For detailed instructions, please refer to the [Start the service via command](https://opendatalab.github.io/MinerU/usage/quick_usage/#advanced-usage-via-api-webui-http-clientserver).
+After executing this command, you will enter the Docker container's interactive terminal with ports mapped for optional API services. You can directly run MinerU CLI commands within the container.
+You can also start optional services by replacing `/bin/bash` with service startup commands. For detailed instructions, please refer to the [Start the service via command](https://opendatalab.github.io/MinerU/usage/quick_usage/).
 
 ## Start Services Directly with Docker Compose
 
@@ -87,11 +87,3 @@ connect to `openai-server` via `vlm-http-client` backend
   >- If you want to aggregate existing `mineru-api` services instead of starting local workers, refer to the commented example under the `mineru-router` service in `compose.yaml` and switch to `--upstream-url`.
 
 ---
-
-### Start Gradio WebUI service
-  ```bash
-  docker compose -f compose.yaml --profile gradio up -d
-  ```
-  >[!TIP]
-  >
-  >- Access `http://<server_ip>:7860` in your browser to use the Gradio WebUI.

@@ -32,6 +32,7 @@ from mineru.utils.config_reader import (
 from mineru.utils.guess_suffix_or_lang import guess_suffix_by_path
 from mineru.utils.ocr_language import PUBLIC_OCR_LANGUAGES, validate_public_ocr_lang
 from mineru.utils.pdf_page_id import get_end_page_id
+from mineru.utils.pdf_classify import classify as classify_pdf
 from mineru.utils.pdfium_guard import (
     close_pdfium_document,
     get_pdfium_document_page_count,
@@ -54,6 +55,20 @@ from mineru.cli.visualization import (
     VisualizationJob,
     run_visualization_job,
 )
+from mineru.cli.device_scheduler import (
+    DEFAULT_DEVICE_SELECTION,
+    DeviceWorkerSpec,
+    PipelineDevice,
+    execute_device_jobs,
+    resolve_device_specs,
+)
+from mineru.utils.intel_acceleration import (
+    OPENVINO_CACHE_DIR_ENV,
+    OPENVINO_DEVICE_ENV,
+    OPENVINO_SKIP_MODELS_ENV,
+    EXPERIMENTAL_NPU_ENV,
+    experimental_npu_enabled,
+)
 
 os.environ["TORCH_CUDNN_V8_API_DISABLED"] = "1"
 log_level = os.getenv("MINERU_LOG_LEVEL", "INFO").upper()
@@ -65,6 +80,7 @@ class InputDocument:
     stem: str
     effective_pages: int
     order: int
+    classification: str = "ocr"
 
 
 @dataclass
@@ -564,8 +580,14 @@ def collect_input_documents(
                 start_page_id=start_page_id,
                 end_page_id=end_page_id,
             )
+            try:
+                classification = classify_pdf(path.read_bytes())
+            except Exception as exc:
+                logger.warning("Failed to classify PDF {}; treating it as OCR: {}", path, exc)
+                classification = "ocr"
         else:
             effective_pages = 1
+            classification = "ocr"
 
         collected.append(
             InputDocument(
@@ -574,6 +596,7 @@ def collect_input_documents(
                 stem=path.stem,
                 effective_pages=effective_pages,
                 order=order,
+                classification=classification,
             )
         )
 
@@ -599,6 +622,7 @@ def collect_input_documents(
                 stem=effective_stem,
                 effective_pages=document.effective_pages,
                 order=document.order,
+                classification=document.classification,
             )
             for document, effective_stem in zip(collected, normalized_stems)
         ]
@@ -655,13 +679,29 @@ def plan_tasks(
     documents: list[InputDocument],
     backend: str,
     processing_window_size: int,
+    force_single_document: bool = False,
 ) -> list[PlannedTask]:
-    if backend == "pipeline":
+    if backend == "pipeline" and not force_single_document:
         return plan_pipeline_tasks(documents, processing_window_size)
     return [
         PlannedTask(index=index, documents=[document], total_pages=document.effective_pages)
         for index, document in enumerate(documents, start=1)
     ]
+
+
+def device_can_process_task(
+    planned_task: PlannedTask,
+    spec: DeviceWorkerSpec,
+) -> bool:
+    """Keep native-text PDFs off the NPU path.
+
+    The current Intel NPU backend is reliable for image/OCR PDFs, but its
+    OpenVINO OCR path can erase an existing PDF text layer.  GPU and CPU keep
+    the native text extraction path intact, so they remain valid fallbacks.
+    """
+    if spec.device is not PipelineDevice.NPU:
+        return True
+    return all(document.classification != "txt" for document in planned_task.documents)
 
 
 def build_request_form_data(
@@ -923,6 +963,7 @@ async def run_orchestrated_cli(
     client_side_output_generation: bool = False,
     effort: str = DEFAULT_HYBRID_EFFORT,
     extra_cli_args: tuple[str, ...] = (),
+    devices: str = DEFAULT_DEVICE_SELECTION,
 ) -> None:
     if start_page_id < 0:
         raise click.ClickException("--start must be greater than or equal to 0")
@@ -943,10 +984,185 @@ async def run_orchestrated_cli(
 
     timeout = build_http_timeout()
     local_server: LocalAPIServer | None = None
+    device_servers: list[LocalAPIServer] = []
     visualization_context: Optional[VisualizationContext] = None
     live_renderer: Optional[LiveTaskStatusRenderer] = None
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as http_client:
         try:
+            use_device_scheduler = backend == "pipeline" and api_url is None
+            if use_device_scheduler:
+                requested_specs = resolve_device_specs(devices)
+                if any(spec.device is PipelineDevice.NPU for spec in requested_specs):
+                    if not experimental_npu_enabled():
+                        logger.warning(
+                            "Intel NPU is visible but disabled for pipeline parsing "
+                            "because this runtime produced empty OCR results. "
+                            "Set {}=1 to opt into experimental NPU execution.",
+                            EXPERIMENTAL_NPU_ENV,
+                        )
+                        requested_specs = tuple(
+                            spec
+                            for spec in requested_specs
+                            if spec.device is not PipelineDevice.NPU
+                        )
+                    if not requested_specs:
+                        raise click.ClickException(
+                            "Intel NPU pipeline execution is currently experimental "
+                            f"and disabled by default; set {EXPERIMENTAL_NPU_ENV}=1 "
+                            "only for testing, or select CPU/GPU."
+                        )
+                worker_count = min(len(requested_specs), len(documents))
+                # Native-text PDFs must not be assigned to NPU.  Prefer CPU as
+                # the second worker in mixed text/OCR batches so the GPU can
+                # keep the large OCR document while the text job runs in
+                # parallel.  For OCR-only batches, NPU remains the preferred
+                # parallel worker after GPU.
+                has_text_document = any(
+                    document.classification == "txt" for document in documents
+                )
+                priority = (
+                    {"GPU": 0, "CPU": 1, "NPU": 2}
+                    if has_text_document
+                    else {"GPU": 0, "NPU": 1, "CPU": 2}
+                )
+                worker_specs = tuple(
+                    sorted(requested_specs, key=lambda spec: priority[spec.device.value])[
+                        :worker_count
+                    ]
+                )
+                incompatible_tasks = [
+                    document
+                    for document in documents
+                    if not any(
+                        device_can_process_task(
+                            PlannedTask(
+                                index=0,
+                                documents=[document],
+                                total_pages=document.effective_pages,
+                            ),
+                            spec,
+                        )
+                        for spec in worker_specs
+                    )
+                ]
+                if incompatible_tasks:
+                    names = ", ".join(document.path.name for document in incompatible_tasks)
+                    raise click.ClickException(
+                        "Selected devices cannot parse native-text PDF(s) on NPU: "
+                        f"{names}. Select CPU or GPU, or use --devices auto."
+                    )
+                worker_health: dict[str, ServerHealth] = {}
+                for spec in worker_specs:
+                    env_overrides = {
+                        OPENVINO_DEVICE_ENV: spec.target or "",
+                        OPENVINO_CACHE_DIR_ENV: str(
+                            output_dir / ".mineru-openvino-cache" / spec.worker_id
+                        ),
+                        # OpenVINO compiles CPU-resident PyTorch graphs; do not
+                        # let an inherited CUDA/Ascend setting move tensors to
+                        # an unrelated backend in an Intel worker.
+                        "MINERU_DEVICE_MODE": "cpu",
+                        "MINERU_API_MAX_CONCURRENT_REQUESTS": "1",
+                    }
+                    if spec.device is PipelineDevice.NPU:
+                        # The Intel NPU compiler currently returns empty layout
+                        # detections for PP-DocLayoutV2. Keep layout on native
+                        # CPU so NPU can still be used safely by supported OCR
+                        # and formula submodels.
+                        env_overrides[OPENVINO_SKIP_MODELS_ENV] = (
+                            "PPDocLayoutV2ForObjectDetection"
+                        )
+                    server = LocalAPIServer(
+                        extra_cli_args=extra_cli_args,
+                        env_overrides=env_overrides,
+                    )
+                    device_servers.append(server)
+                    base_url = server.start()
+                    logger.info(
+                        "Started local mineru-api worker {} ({}) at {}",
+                        spec.worker_id,
+                        spec.full_name,
+                        base_url,
+                    )
+                    worker_health[spec.worker_id] = await wait_for_local_api_ready(
+                        http_client,
+                        server,
+                    )
+
+                # Assign the largest whole-document jobs first so the first
+                # (normally fastest) accelerator is not left with a tiny file
+                # while a long document occupies the slower worker for the
+                # remainder of the run.  ``task.index`` remains stable for
+                # progress/error reporting and output paths use document stem.
+                scheduler_documents = sorted(
+                    documents,
+                    key=lambda document: (-document.effective_pages, document.order),
+                )
+                planned_tasks = plan_tasks(
+                    documents=scheduler_documents,
+                    backend=backend,
+                    processing_window_size=DEFAULT_PROCESSING_WINDOW_SIZE,
+                    force_single_document=True,
+                )
+                progress = build_task_execution_progress(planned_tasks)
+                form_data = build_request_form_data(
+                    lang=lang,
+                    backend=backend,
+                    method=method,
+                    formula_enable=formula_enable,
+                    table_enable=table_enable,
+                    image_analysis=image_analysis,
+                    server_url=server_url,
+                    start_page_id=start_page_id,
+                    end_page_id=end_page_id,
+                    client_side_output_generation=client_side_output_generation,
+                    effort=effort,
+                )
+                visualization_context = create_visualization_context()
+
+                async def run_device_task(
+                    planned_task: PlannedTask,
+                    spec: DeviceWorkerSpec,
+                ) -> None:
+                    await run_planned_task(
+                        client=http_client,
+                        server_health=worker_health[spec.worker_id],
+                        planned_task=planned_task,
+                        progress=progress,
+                        backend=backend,
+                        parse_method=method,
+                        visualization_context=visualization_context,
+                        form_data=form_data,
+                        output_dir=output_dir,
+                        live_renderer=None,
+                        client_side_output_generation=client_side_output_generation,
+                    )
+
+                _, device_failures = await execute_device_jobs(
+                    planned_tasks,
+                    worker_specs,
+                    run_device_task,
+                    can_run=device_can_process_task,
+                )
+                failures = [
+                    TaskFailure(
+                        task_index=task.index,
+                        document_stems=tuple(doc.stem for doc in task.documents),
+                        message=str(exc),
+                    )
+                    for task, exc in device_failures
+                ]
+                if failures:
+                    details = "\n".join(
+                        f"- task#{failure.task_index} "
+                        f"({', '.join(failure.document_stems)}): {failure.message}"
+                        for failure in sorted(failures, key=lambda item: item.task_index)
+                    )
+                    raise click.ClickException(
+                        f"{len(failures)} task(s) failed while processing documents:\n{details}"
+                    )
+                return
+
             if api_url is None:
                 local_server = LocalAPIServer(extra_cli_args=extra_cli_args)
                 base_url = local_server.start()
@@ -1015,7 +1231,8 @@ async def run_orchestrated_cli(
             )
             if failures:
                 details = "\n".join(
-                    f"- task#{failure.task_index} ({', '.join(failure.document_stems)}): {failure.message}"
+                    f"- task#{failure.task_index} "
+                    f"({', '.join(failure.document_stems)}): {failure.message}"
                     for failure in sorted(failures, key=lambda item: item.task_index)
                 )
                 raise click.ClickException(
@@ -1023,6 +1240,8 @@ async def run_orchestrated_cli(
                 )
         finally:
             try:
+                for server in reversed(device_servers):
+                    server.stop()
                 if local_server is not None:
                     local_server.stop()
             finally:
@@ -1059,6 +1278,17 @@ async def run_orchestrated_cli(
     type=str,
     default=None,
     help="MinerU FastAPI base URL. If omitted, mineru starts a temporary local mineru-api service.",
+)
+@click.option(
+    "--devices",
+    "devices",
+    type=str,
+    default=DEFAULT_DEVICE_SELECTION,
+    show_default=True,
+    help=(
+        "Pipeline worker devices: auto (CPU,GPU,NPU), or a comma-separated "
+        "selection such as gpu,npu. Applies only to local pipeline parsing."
+    ),
 )
 @click.option(
     "-m",
@@ -1187,6 +1417,7 @@ def main(
     input_path: Path,
     output_dir: Path,
     api_url: Optional[str],
+    devices: str,
     method: str,
     backend: str,
     effort: str,
@@ -1216,6 +1447,7 @@ def main(
             image_analysis=image_analysis,
             client_side_output_generation=client_side_output_generation,
             extra_cli_args=tuple(ctx.args),
+            devices=devices,
         )
     )
 

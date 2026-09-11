@@ -180,7 +180,7 @@
       <td>🟢</td>
     </tr>
     <tr>
-      <td rowspan="5">gradio界面(mineru-gradio)</td>
+      <td rowspan="5">CLI</td>
       <td>pipeline</td>
       <td>🔴</td>
     </tr>

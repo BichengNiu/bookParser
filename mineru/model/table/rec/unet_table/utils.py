@@ -16,7 +16,14 @@ from onnxruntime import (
 )
 from PIL import Image, UnidentifiedImageError
 
-from ..onnxruntime_provider import build_table_onnx_providers
+from ..onnxruntime_provider import (
+    build_table_onnx_providers,
+    create_table_onnx_session,
+)
+from mineru.utils.intel_acceleration import (
+    ensure_openvino_runtime_libraries,
+    observe_openvino_provider,
+)
 
 
 root_dir = Path(__file__).resolve().parent
@@ -27,17 +34,21 @@ class OrtInferSession:
     def __init__(self, config: Dict[str, Any]):
         self.logger = loguru.logger
 
+        ensure_openvino_runtime_libraries()
+
         model_path = config.get("model_path", None)
 
         self.had_providers: List[str] = get_available_providers()
         EP_list = self._get_ep_list()
 
         sess_opt = self._init_sess_opts(config)
-        self.session = InferenceSession(
+        self.session = create_table_onnx_session(
             model_path,
             sess_options=sess_opt,
             providers=EP_list,
+            model_name="UNetTable",
         )
+        observe_openvino_provider(self.session, model_name="UNetTable")
 
     @staticmethod
     def _init_sess_opts(config: Dict[str, Any]) -> SessionOptions:
