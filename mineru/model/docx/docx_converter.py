@@ -17,11 +17,10 @@ from pydantic import AnyUrl
 from mammoth.conversion import convert_document_element_to_html
 from mammoth.docx import body_xml
 
-from mineru.model.docx.package_normalizer import normalize_docx_package
 from mineru.model.docx.tools.office_xml import read_str
 from mineru.model.docx.tools.math.omml import oMath2Latex
 from mineru.utils.docx_formatting import Formatting, Script
-from mineru.utils.enum_class import BlockType, ContentType
+from mineru.utils.enum_class import BlockType
 from mineru.utils.office_rich_text import (
     append_rich_text_element,
     build_text_mappings_from_elements,
@@ -715,10 +714,6 @@ class DocxConverter:
 
         return "".join(result_parts)
 
-    def _sanitize_missing_internal_relationships(self, file_bytes: bytes) -> bytes:
-        """规范化 DOCX 包，兼容缺失内部关系和损坏图片成员。"""
-        return normalize_docx_package(file_bytes)
-
     def _start_new_page(self) -> None:
         self.cur_page = []
         self.pages.append(self.cur_page)
@@ -777,7 +772,7 @@ class DocxConverter:
         self._numbering_start_cache = {}
         self._reset_style_caches()
         # 读取文件字节，以便 mammoth 和 python-docx 各自使用独立读取流
-        file_bytes = self._sanitize_missing_internal_relationships(file_stream.read())
+        file_bytes = file_stream.read()
         # 使用完整 DOCX 上下文预解析顶层表格，避免转换非表格正文带来的资源浪费
         self._mammoth_tables_html = self._preparse_tables_with_mammoth(file_bytes)
         self._mammoth_table_idx = 0

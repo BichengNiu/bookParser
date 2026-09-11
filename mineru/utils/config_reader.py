@@ -41,23 +41,22 @@ def get_configured_model_source(default: str | None = None) -> str | None:
     if model_source is None:
         return default
     if not isinstance(model_source, str):
-        logger.warning(
-            f"'model-source' in {CONFIG_FILE_NAME} must be a string, use {default} as default"
+        raise ValueError(
+            f"'model-source' in {CONFIG_FILE_NAME} must be a string"
         )
-        return default
 
     normalized_model_source = model_source.strip().lower()
     if not normalized_model_source:
-        return default
+        raise ValueError(f"'model-source' in {CONFIG_FILE_NAME} cannot be empty")
     if normalized_model_source == "auto":
-        return default
+        return "auto"
     if normalized_model_source in supported_sources:
         return normalized_model_source
 
-    logger.warning(
-        f"Unsupported 'model-source' in {CONFIG_FILE_NAME}: {model_source}, use {default} as default"
+    raise ValueError(
+        f"Unsupported 'model-source' in {CONFIG_FILE_NAME}: {model_source}. "
+        f"Choose auto, {', '.join(sorted(supported_sources))}"
     )
-    return default
 
 
 def get_s3_config(bucket_name: str):

@@ -33,13 +33,13 @@ class DeviceSchedulerTests(unittest.TestCase):
         specs = resolve_device_specs("cpu", available=())
         self.assertEqual(specs[0].target, None)
 
-    def test_auto_keeps_cpu_fallback_when_openvino_is_missing(self):
+    def test_auto_requires_openvino_inventory(self):
         with patch(
             "mineru.cli.device_scheduler.query_openvino_devices",
             side_effect=RuntimeError("OpenVINO is not installed"),
         ):
-            specs = resolve_device_specs("auto")
-        self.assertEqual(tuple(spec.device for spec in specs), (PipelineDevice.CPU,))
+            with self.assertRaisesRegex(RuntimeError, "OpenVINO is not installed"):
+                resolve_device_specs("auto")
 
     def test_dynamic_queue_does_not_start_idle_workers(self):
         jobs = ["a", "b"]

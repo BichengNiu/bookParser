@@ -21,7 +21,6 @@ from loguru import logger
 
 OPENVINO_DEVICE_ENV = "MINERU_OPENVINO_DEVICE"
 OPENVINO_CACHE_DIR_ENV = "MINERU_OPENVINO_CACHE_DIR"
-OPENVINO_STRICT_ENV = "MINERU_OPENVINO_STRICT"
 OPENVINO_SKIP_MODELS_ENV = "MINERU_OPENVINO_SKIP_MODELS"
 EXPERIMENTAL_NPU_ENV = "MINERU_ENABLE_EXPERIMENTAL_NPU"
 OPENVINO_PROVIDER_NAME = "OpenVINOExecutionProvider"
@@ -39,12 +38,11 @@ class IntelDeviceInfo:
 
 @dataclass(frozen=True)
 class OpenVINOCompilation:
-    """Result of attempting to compile one PyTorch submodel."""
+    """Result of compiling one PyTorch submodel."""
 
     model_name: str
     device: str
     accelerated: bool
-    fallback_reason: str | None = None
 
 
 _compilation_lock = threading.RLock()
@@ -136,29 +134,22 @@ def ensure_openvino_runtime_libraries() -> Path | None:
     ``onnxruntime-openvino`` loads its execution-provider DLL lazily.  The
     provider wheel does not automatically add the sibling ``openvino/libs``
     directory installed by the ``openvino`` wheel to the Windows DLL search
-    path, which otherwise causes a misleading CPU fallback (error 126).
+    path, which otherwise causes a provider load error (error 126).
     The handle returned by :func:`os.add_dll_directory` must stay alive for
     the lifetime of the process, so handles are retained in module state.
     """
 
     if os.name != "nt":
         return None
-    try:
-        import openvino
-    except ImportError:
-        return None
+    import openvino
 
     libs_dir = Path(openvino.__file__).resolve().parent / "libs"
     if not libs_dir.is_dir():
-        return None
+        raise RuntimeError(f"OpenVINO runtime library directory is missing: {libs_dir}")
 
     libs_text = str(libs_dir)
-    try:
-        handle = os.add_dll_directory(libs_text)
-    except (AttributeError, OSError):  # pragma: no cover - platform/runtime
-        handle = None
-    if handle is not None:
-        _openvino_dll_handles.append(handle)
+    handle = os.add_dll_directory(libs_text)
+    _openvino_dll_handles.append(handle)
 
     path_entries = os.environ.get("PATH", "").split(os.pathsep)
     if libs_text not in path_entries:
@@ -173,7 +164,7 @@ def observe_openvino_provider(session: Any, *, model_name: str) -> bool:
     if target is None or target == "CPU":
         return True
 
-    providers = tuple(getattr(session, "get_providers", lambda: ())())
+    providers = tuple(session.get_providers())
     if OPENVINO_PROVIDER_NAME in providers:
         logger.info(
             "OpenVINO execution provider active for {} on {}",
@@ -182,15 +173,10 @@ def observe_openvino_provider(session: Any, *, model_name: str) -> bool:
         )
         return True
 
-    message = (
+    raise RuntimeError(
         f"OpenVINO execution provider did not activate for {model_name} on "
-        f"{target}; active providers: {', '.join(providers) or 'none'}. "
-        "ONNX Runtime is using CPU fallback."
+        f"{target}; active providers: {', '.join(providers) or 'none'}."
     )
-    if _truthy_env(OPENVINO_STRICT_ENV):
-        raise RuntimeError(message)
-    logger.warning(message)
-    return False
 
 
 def validate_openvino_device(device: str) -> IntelDeviceInfo:
@@ -234,10 +220,8 @@ def clear_compilation_report() -> None:
 def compile_torch_module(module: Any, *, model_name: str) -> Any:
     """Compile a PyTorch module for the configured OpenVINO device.
 
-    OpenVINO's Torch backend partitions unsupported operations and may execute
-    those partitions in the native backend.  A conversion failure is therefore
-    recorded with the model name and device.  ``MINERU_OPENVINO_STRICT=true``
-    turns that failure into a hard error for validation/deployment environments.
+    OpenVINO's Torch backend partitions supported operations for the requested
+    device. Compilation errors are surfaced to the caller.
     """
 
     device = configured_openvino_device()
@@ -253,36 +237,19 @@ def compile_torch_module(module: Any, *, model_name: str) -> Any:
         return module
 
     validate_openvino_device(device)
-    try:
-        import openvino.torch  # noqa: F401  # registers the torch backend
-        import torch
+    import openvino.torch  # noqa: F401  # registers the torch backend
+    import torch
 
-        compiled = torch.compile(
-            module,
-            backend="openvino",
-            dynamic=False,
-            options={
-                "device": device,
-                "model_caching": True,
-                "cache_dir": str(openvino_cache_dir()),
-            },
-        )
-    except Exception as exc:
-        result = OpenVINOCompilation(
-            model_name=model_name,
-            device=device,
-            accelerated=False,
-            fallback_reason=str(exc),
-        )
-        record_compilation(result)
-        message = (
-            f"OpenVINO compilation failed for {model_name} on {device}; "
-            f"using CPU fallback: {exc}"
-        )
-        if _truthy_env(OPENVINO_STRICT_ENV):
-            raise RuntimeError(message) from exc
-        logger.warning(message)
-        return module
+    compiled = torch.compile(
+        module,
+        backend="openvino",
+        dynamic=False,
+        options={
+            "device": device,
+            "model_caching": True,
+            "cache_dir": str(openvino_cache_dir()),
+        },
+    )
 
     record_compilation(
         OpenVINOCompilation(model_name=model_name, device=device, accelerated=True)

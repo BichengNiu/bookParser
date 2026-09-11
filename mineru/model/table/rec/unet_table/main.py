@@ -19,7 +19,7 @@ from .table_structure_unet import TSRUnet
 from mineru.utils.enum_class import ModelPath
 from mineru.utils.models_download_utils import auto_download_and_get_model_root_path
 from .table_recover import TableRecover
-from .utils import InputType, LoadImage, VisTable
+from .utils import InputType, LoadImage
 from .utils_table_recover import (
     match_ocr_cell,
     plot_html_table,
@@ -295,16 +295,6 @@ class UnetTableModel:
                 if return_metadata
                 else None
             )
-
-            # viser = VisTable()
-            # save_html_path = f"outputs/output.html"
-            # save_drawed_path = f"outputs/output_table_vis.jpg"
-            # save_logic_path = (
-            #     f"outputs/output_table_vis_logic.jpg"
-            # )
-            # vis_imged = viser(
-            #     np_img, wired_table_results, save_html_path, save_drawed_path, save_logic_path
-            # )
 
             wired_html_code = wired_table_results.pred_html
             wired_len = count_table_cells_physical(wired_html_code)

@@ -42,7 +42,7 @@ def test_pipeline_with_two_config():
         pdf_bytes = read_fn(path)
         pdf_file_names.append(file_name)
         pdf_bytes_list.append(pdf_bytes)
-        p_lang_list.append("en")
+        p_lang_list.append("ch")
     for idx, pdf_bytes in enumerate(pdf_bytes_list):
         new_pdf_bytes = convert_pdf_bytes_to_bytes(pdf_bytes)
         pdf_bytes_list[idx] = new_pdf_bytes
@@ -55,7 +55,7 @@ def test_pipeline_with_two_config():
         parse_method="txt",
     )
     res_json_path = (
-        Path(__file__).parent / "output" / "test" / "txt" / "test_content_list.json"
+        Path(__file__).parent / "output" / "test" / "txt" / "test_content_list_v2.json"
     ).as_posix()
     assert_content(res_json_path, parse_method="txt")
     run_pipeline_parse(
@@ -66,7 +66,7 @@ def test_pipeline_with_two_config():
         parse_method="ocr",
     )
     res_json_path = (
-        Path(__file__).parent / "output" / "test" / "ocr" / "test_content_list.json"
+        Path(__file__).parent / "output" / "test" / "ocr" / "test_content_list_v2.json"
     ).as_posix()
     assert_content(res_json_path, parse_method="ocr")
 
@@ -122,20 +122,10 @@ def write_infer_result(
         md_content_str,
     )
 
-    content_list = pipeline_union_make(pdf_info, MakeMode.CONTENT_LIST, image_dir)
+    content_list = pipeline_union_make(pdf_info, MakeMode.CONTENT_LIST_V2, image_dir)
     md_writer.write_string(
-        f"{pdf_file_name}_content_list.json",
+        f"{pdf_file_name}_content_list_v2.json",
         json.dumps(content_list, ensure_ascii=False, indent=4),
-    )
-
-    md_writer.write_string(
-        f"{pdf_file_name}_middle.json",
-        json.dumps(middle_json, ensure_ascii=False, indent=4),
-    )
-
-    md_writer.write_string(
-        f"{pdf_file_name}_model.json",
-        json.dumps(model_list, ensure_ascii=False, indent=4),
     )
 
     logger.info(f"local output dir is {local_md_dir}")
@@ -152,7 +142,7 @@ def validate_html(html_content):
 def assert_content(content_path, parse_method="txt"):
     content_list = []
     with open(content_path, "r", encoding="utf-8") as file:
-        content_list = json.load(file)
+        content_list = [item for page in json.load(file) for item in page]
         logger.info(content_list)
     type_set = set()
     for content_dict in content_list:
@@ -162,7 +152,7 @@ def assert_content(content_path, parse_method="txt"):
                 type_set.add("image")
                 assert (
                     fuzz.ratio(
-                        content_dict["image_caption"][0],
+                        content_dict["content"]["image_caption"][0]["content"],
                         "Figure 1: Figure Caption",
                     )
                     > 90
@@ -172,12 +162,12 @@ def assert_content(content_path, parse_method="txt"):
                 type_set.add("table")
                 assert (
                     fuzz.ratio(
-                        content_dict["table_caption"][0],
+                        content_dict["content"]["table_caption"][0]["content"],
                         "Table 1: Table Caption",
                     )
                     > 90
                 )
-                assert validate_html(content_dict["table_body"])
+                assert validate_html(content_dict["content"]["html"])
                 target_str_list = [
                     "Model",
                     "Testing",
@@ -193,7 +183,7 @@ def assert_content(content_path, parse_method="txt"):
                 ]
                 correct_count = 0
                 for target_str in target_str_list:
-                    if target_str in content_dict["table_body"]:
+                    if target_str in content_dict["content"]["html"]:
                         correct_count += 1
                 if parse_method == "txt" or parse_method == "ocr":
                     assert correct_count > 0.9 * len(target_str_list)
@@ -202,17 +192,22 @@ def assert_content(content_path, parse_method="txt"):
                 else:
                     assert False
             # 公式校验，检测是否含有公式元素
-            case "equation":
+            case "equation_interline":
                 type_set.add("equation")
-                target_str_list = ["$$", "lambda", "frac", "bar"]
+                target_str_list = ["lambda", "frac", "bar"]
                 for target_str in target_str_list:
-                    assert target_str in content_dict["text"]
+                    assert target_str in content_dict["content"]["math_content"]
             # 文本校验，文本相似度超过90
-            case "text":
+            case "paragraph":
                 type_set.add("text")
+                paragraph_text = "".join(
+                    part["content"]
+                    for part in content_dict["content"]["paragraph_content"]
+                    if part["type"] == "text"
+                )
                 assert (
                     fuzz.ratio(
-                        content_dict["text"],
+                        paragraph_text,
                         "Trump graduated from the Wharton School of the University of Pennsylvania with a bachelor's degree in 1968. He became president of his father's real estate business in 1971 and renamed it The Trump Organization.",
                     )
                     > 90

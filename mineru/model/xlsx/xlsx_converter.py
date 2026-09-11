@@ -27,8 +27,7 @@ from mineru.backend.utils.office_image import (
 )
 from mineru.utils.pdf_reader import image_to_b64str
 from mineru.model.docx.tools.math.omml import oMath2Latex
-from mineru.model.office_stream import read_stream_bytes_from_start, rewind_stream
-from mineru.model.xlsx.package_normalizer import normalize_xlsx_package
+from mineru.model.office_stream import rewind_stream
 
 AUTO_GAP_TOLERANCE_CANDIDATES = (0, 1, 2)
 AUTO_GAP_TOLERANCE_PREFERENCE = {1: 0, 0: 1, 2: 2}
@@ -191,19 +190,11 @@ class XlsxConverter:
         file_stream: BinaryIO,
     ):
         if rewind_stream(file_stream):
-            try:
-                self._convert_package_stream(file_stream)
-                return
-            except Exception as exc:
-                file_bytes = read_stream_bytes_from_start(file_stream)
-                self._retry_convert_package_bytes_after_normalization(file_bytes, exc)
-                return
+            self._convert_package_stream(file_stream)
+            return
 
         file_bytes = file_stream.read()
-        try:
-            self._convert_package_bytes(file_bytes)
-        except Exception as exc:
-            self._retry_convert_package_bytes_after_normalization(file_bytes, exc)
+        self._convert_package_stream(BytesIO(file_bytes))
 
     def _reset_state(self) -> None:
         """重置解析状态，确保失败重试时不会残留上一次半解析结果。"""
@@ -219,10 +210,6 @@ class XlsxConverter:
         self.cell_image_map = {}
         self.math_map = {}
         self._merged_cell_lookup_cache = {}
-
-    def _convert_package_bytes(self, file_bytes: bytes) -> None:
-        """用独立字节流解析 XLSX 包，便于原始包失败后用规范化包重试。"""
-        self._convert_package_stream(BytesIO(file_bytes))
 
     def _convert_package_stream(self, file_stream: BinaryIO) -> None:
         """直接使用可复位的 XLSX 流解析正常路径，避免提前复制完整包字节。"""
@@ -259,18 +246,6 @@ class XlsxConverter:
             if self.zf:
                 self.zf.close()
                 self.zf = None
-
-    def _retry_convert_package_bytes_after_normalization(
-        self,
-        file_bytes: bytes,
-        exc: Exception,
-    ) -> None:
-        """首次解析失败后，仅在包规范化确实产生变化时使用规范化字节重试。"""
-        normalized_bytes = normalize_xlsx_package(file_bytes)
-        if normalized_bytes == file_bytes:
-            raise exc
-        logger.warning(f"Retrying XLSX parsing after package normalization: {exc}")
-        self._convert_package_bytes(normalized_bytes)
 
     def _iter_sheets_to_convert(self):
         if self.workbook is None:

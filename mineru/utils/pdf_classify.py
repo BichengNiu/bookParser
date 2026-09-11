@@ -1012,44 +1012,10 @@ def _get_font_resource_signals_pypdf(
     }
 
 
-def get_cid_font_signal_pypdf(
-    pdf_bytes: bytes,
-    page_indices: list[int],
-) -> dict:
-    """兼容旧接口：返回抽样页无 ToUnicode 的 Identity CID 字体资源。"""
-    return _get_font_resource_signals_pypdf(
-        pdf_bytes,
-        page_indices,
-    )["cid_without_to_unicode"]
-
-
-def detect_cid_font_signal_pypdf(
-    pdf_bytes: bytes,
-    page_indices: list[int],
-) -> bool:
-    """兼容旧接口：只返回是否存在无 ToUnicode 的 Identity CID 字体资源。"""
-    return get_cid_font_signal_pypdf(pdf_bytes, page_indices)["triggered"]
-
-
 def _resolve_pdf_object(obj):
     if hasattr(obj, "get_object"):
         return obj.get_object()
     return obj
-
-
-def _get_pdfium_page_object_bounds(page_object):
-    """兼容 pypdfium2 4.x/5.x，统一获取页面对象的边界坐标。"""
-    get_bounds = getattr(page_object, "get_bounds", None)
-    if callable(get_bounds):
-        return get_bounds()
-
-    get_pos = getattr(page_object, "get_pos", None)
-    if callable(get_pos):
-        return get_pos()
-
-    raise AttributeError(
-        "PDFium page object has neither get_bounds() nor get_pos()"
-    )
 
 
 def get_high_image_coverage_ratio_pdfium(pdf_doc, page_indices):
@@ -1070,9 +1036,7 @@ def get_high_image_coverage_ratio_pdfium(pdf_doc, page_indices):
                     filter=[pdfium_c.FPDF_PAGEOBJ_IMAGE], max_depth=3
                 ):
                     try:
-                        left, bottom, right, top = _get_pdfium_page_object_bounds(
-                            page_object
-                        )
+                        left, bottom, right, top = page_object.get_bounds()
                         image_area += max(0.0, right - left) * max(0.0, top - bottom)
                     finally:
                         close_pdfium_child(page_object)

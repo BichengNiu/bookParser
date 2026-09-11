@@ -186,7 +186,8 @@ def read_fn(path, file_suffix: str | None = None):
 def prepare_env(output_dir, pdf_file_name, parse_method):
     local_md_dir = str(os.path.join(output_dir, pdf_file_name, parse_method))
     local_image_dir = os.path.join(str(local_md_dir), "images")
-    os.makedirs(local_image_dir, exist_ok=True)
+    # FileBasedDataWriter creates the image directory on first write.  Keep
+    # the default result clean when a document contains no extractable images.
     os.makedirs(local_md_dir, exist_ok=True)
     return local_image_dir, local_md_dir
 
@@ -319,13 +320,8 @@ def _process_output(
         )
 
     if f_dump_content_list:
-
-        content_list = make_func(pdf_info, MakeMode.CONTENT_LIST, image_dir)
-        md_writer.write_string(
-            f"{pdf_file_name}_content_list.json",
-            json.dumps(content_list, ensure_ascii=False, indent=4),
-        )
-
+        # content_list_v2 is the single structured output exposed by the
+        # default CLI profile.
         content_list_v2 = make_func(pdf_info, MakeMode.CONTENT_LIST_V2, image_dir)
         md_writer.write_string(
             f"{pdf_file_name}_content_list_v2.json",
@@ -620,9 +616,9 @@ def _process_office_doc(
         pdf_file_names: list[str],
         pdf_bytes_list: list[bytes],
         f_dump_md=True,
-        f_dump_middle_json=True,
-        f_dump_model_output=True,
-        f_dump_orig_file=True,
+        f_dump_middle_json=False,
+        f_dump_model_output=False,
+        f_dump_orig_file=False,
         f_dump_content_list=True,
         f_make_md_mode=MakeMode.MM_MD,
 ):
@@ -675,12 +671,12 @@ def do_parse(
         formula_enable=True,
         table_enable=True,
         server_url=None,
-        f_draw_layout_bbox=True,
-        f_draw_span_bbox=True,
+        f_draw_layout_bbox=False,
+        f_draw_span_bbox=False,
         f_dump_md=True,
-        f_dump_middle_json=True,
-        f_dump_model_output=True,
-        f_dump_orig_pdf=True,
+        f_dump_middle_json=False,
+        f_dump_model_output=False,
+        f_dump_orig_pdf=False,
         f_dump_content_list=True,
         f_make_md_mode=MakeMode.MM_MD,
         start_page_id=0,
@@ -767,12 +763,12 @@ async def aio_do_parse(
         formula_enable=True,
         table_enable=True,
         server_url=None,
-        f_draw_layout_bbox=True,
-        f_draw_span_bbox=True,
+        f_draw_layout_bbox=False,
+        f_draw_span_bbox=False,
         f_dump_md=True,
-        f_dump_middle_json=True,
-        f_dump_model_output=True,
-        f_dump_orig_pdf=True,
+        f_dump_middle_json=False,
+        f_dump_model_output=False,
+        f_dump_orig_pdf=False,
         f_dump_content_list=True,
         f_make_md_mode=MakeMode.MM_MD,
         start_page_id=0,

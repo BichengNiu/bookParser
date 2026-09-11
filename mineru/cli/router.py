@@ -213,19 +213,18 @@ def reserve_unique_local_ports(count: int) -> list[int]:
 def normalize_local_device_type(device: str | None) -> str:
     """将 get_device() 返回值规范化为基础设备类型。"""
     if not device:
-        return "cuda"
-    return str(device).strip().lower().split(":", 1)[0]
+        raise ValueError("Local device type is not configured")
+    normalized = str(device).strip().lower()
+    if not normalized:
+        raise ValueError("Local device type is not configured")
+    return normalized
 
 
 def get_local_device_type() -> str:
     """懒加载读取当前设备类型，避免 router 导入阶段提前加载 torch。"""
-    try:
-        from mineru.utils.config_reader import get_device
+    from mineru.utils.config_reader import get_device
 
-        return normalize_local_device_type(get_device())
-    except Exception as exc:
-        logger.warning("Failed to resolve local device type, fallback to cuda: {}", exc)
-        return "cuda"
+    return normalize_local_device_type(get_device())
 
 
 def get_local_device_visible_env_name() -> str:

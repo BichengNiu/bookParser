@@ -1,8 +1,6 @@
 # Copyright (c) Opendatalab. All rights reserved.
 import copy
 import math
-import re
-import numpy as np
 import inspect
 import warnings
 from collections import OrderedDict

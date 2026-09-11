@@ -20,8 +20,7 @@ from mineru.backend.utils.office_image import (
 )
 from mineru.model.docx.tools.math.omml import oMath2Latex
 from mineru.backend.utils.office_chart import extract_chart_html_from_ooxml
-from mineru.model.office_stream import read_stream_bytes_from_start, rewind_stream
-from mineru.model.pptx.package_normalizer import normalize_pptx_package
+from mineru.model.office_stream import rewind_stream
 from mineru.model.pptx.xycut_pp_sorter import sort_entries
 from mineru.utils.office_rich_text import (
     OfficeRichTextSegment,
@@ -110,19 +109,11 @@ class PptxConverter:
         file_stream: BinaryIO,
     ):
         if rewind_stream(file_stream):
-            try:
-                self._convert_package_stream(file_stream)
-                return
-            except Exception as exc:
-                file_bytes = read_stream_bytes_from_start(file_stream)
-                self._retry_convert_package_bytes_after_normalization(file_bytes, exc)
-                return
+            self._convert_package_stream(file_stream)
+            return
 
         file_bytes = file_stream.read()
-        try:
-            self._convert_package_bytes(file_bytes)
-        except Exception as exc:
-            self._retry_convert_package_bytes_after_normalization(file_bytes, exc)
+        self._convert_package_stream(BytesIO(file_bytes))
 
     def _reset_state(self) -> None:
         """重置解析状态，确保失败重试时不会残留上一次半解析结果。"""
@@ -132,10 +123,6 @@ class PptxConverter:
         self._shape_type_cache = {}
         self.file_stream = None
         self.pptx_obj = None
-
-    def _convert_package_bytes(self, file_bytes: bytes) -> None:
-        """用独立字节流解析 PPTX 包，便于原始包失败后用规范化包重试。"""
-        self._convert_package_stream(BytesIO(file_bytes))
 
     def _convert_package_stream(self, file_stream: BinaryIO) -> None:
         """直接使用可复位的 PPTX 流解析正常路径，避免提前复制完整包字节。"""
@@ -148,18 +135,6 @@ class PptxConverter:
             self._walk_linear(self.pptx_obj)
         if self.pages and self.pages[-1] == []:
             self.pages.pop()
-
-    def _retry_convert_package_bytes_after_normalization(
-        self,
-        file_bytes: bytes,
-        exc: Exception,
-    ) -> None:
-        """首次解析失败后，仅在包规范化确实产生变化时使用规范化字节重试。"""
-        normalized_bytes = normalize_pptx_package(file_bytes)
-        if normalized_bytes == file_bytes:
-            raise exc
-        logger.warning(f"Retrying PPTX parsing after package normalization: {exc}")
-        self._convert_package_bytes(normalized_bytes)
 
     def _walk_linear(self, pptx_obj: presentation.Presentation):
         slide_width = int(pptx_obj.slide_width)
@@ -796,10 +771,7 @@ class PptxConverter:
 
     @staticmethod
     def _has_blip_without_relationship(shape) -> bool:
-        """判断图片节点是否只有空blip，避免把空fallback误报为图片资源缺失。"""
-        if not hasattr(shape, "_element"):
-            return False
-
+        """判断图片节点是否只有空 blip。"""
         blips = [
             *shape._element.findall(f".//{{{SVG_BLIP_NS}}}svgBlip"),
             *shape._element.findall(f".//{{{DRAWINGML_NS}}}blip"),
@@ -815,37 +787,15 @@ class PptxConverter:
         return True
 
     def _get_shape_image_data(self, shape) -> Optional[tuple[bytes, Optional[str]]]:
-        relationship_id = None
-        if hasattr(shape, "_element"):
-            relationship_id = self._find_first_embedded_image_rid(shape)
-
+        relationship_id = self._find_first_embedded_image_rid(shape)
         if relationship_id:
-            try:
-                image_part = shape.part.related_part(relationship_id)
-                image_bytes = image_part.blob
-            except Exception as e:
-                logger.warning(
-                    f"Warning: embedded image relation {relationship_id} cannot be loaded: {e}"
-                )
-            else:
-                return image_bytes, getattr(image_part, "content_type", None)
+            image_part = shape.part.related_part(relationship_id)
+            return image_part.blob, image_part.content_type
 
         if self._has_blip_without_relationship(shape):
             logger.debug("Skipping PPTX picture with empty blip and no image relation")
             return None
-
-        try:
-            image = shape.image
-        except KeyError as e:
-            logger.warning(f"Warning: shape image relation cannot be loaded: {e}")
-            return None
-        except ValueError as e:
-            logger.warning(f"Warning: shape image cannot be loaded: {e}")
-            return None
-        except AttributeError:
-            return None
-
-        return image.blob, None
+        return None
 
     @staticmethod
     def _normalize_xml_toggle_attr(value: Optional[str]) -> Optional[bool]:
@@ -1028,47 +978,29 @@ class PptxConverter:
         return f"<hyperlink>{text_tag}<url>{hyperlink}</url></hyperlink>"
 
     def _resolve_hyperlink_from_run(self, run, shape) -> Optional[str]:
-        """解析 run 对应的超链接，优先公开 API，回退到 XML + rels。"""
-        try:
-            if hasattr(run, "hyperlink") and run.hyperlink is not None:
-                address = run.hyperlink.address
-                if address and str(address).strip():
-                    return str(address).strip()
-        except Exception:
-            pass
-
-        try:
-            rPr = run._r.find("a:rPr", namespaces=self.namespaces)
-            if rPr is None:
-                return None
-
-            hlink_click = rPr.find("a:hlinkClick", namespaces=self.namespaces)
-            if hlink_click is None:
-                return None
-
-            rid = hlink_click.get(
-                "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
-            )
-            if not rid:
-                return None
-
-            rels = shape.part.rels
-            if rid not in rels:
-                return None
-
-            rel = rels[rid]
-            target_ref = getattr(rel, "target_ref", None)
-            if target_ref and str(target_ref).strip():
-                return str(target_ref).strip()
-
-            target_part = getattr(rel, "target_part", None)
-            if target_part is not None:
-                partname = getattr(target_part, "partname", None)
-                if partname and str(partname).strip():
-                    return str(partname).strip()
-        except Exception:
+        """Resolve a run hyperlink from its XML relationship."""
+        rPr = run._r.find("a:rPr", namespaces=self.namespaces)
+        if rPr is None:
             return None
 
+        hlink_click = rPr.find("a:hlinkClick", namespaces=self.namespaces)
+        if hlink_click is None:
+            return None
+
+        rid = hlink_click.get(
+            "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+        )
+        if not rid:
+            return None
+
+        rel = shape.part.rels[rid]
+        target_ref = rel.target_ref
+        if target_ref and str(target_ref).strip():
+            return str(target_ref).strip()
+
+        partname = rel.target_part.partname
+        if partname and str(partname).strip():
+            return str(partname).strip()
         return None
 
     def _build_paragraph_plain_text(self, paragraph) -> str:
@@ -1894,8 +1826,7 @@ class PptxConverter:
     def _is_list_item(self, paragraph) -> tuple[bool, str]:
         """
         判断段落是否应被视为列表项。
-        该方法首先尝试通过拥有该段落的形状来解析列表样式信息。
-        如果无法做到，则回退到基于段落属性和级别的更简单检查。
+        该方法通过拥有该段落的形状解析列表样式信息。
         Args:
             paragraph: 需要检查的'python-pptx'段落对象。
 
@@ -1906,38 +1837,13 @@ class PptxConverter:
             描述列表标记类型。
         """
         # 尝试从段落获取形状（包含该段落的对象），如果可能的话
-        shape = None
-        try:
-            # 这个路径适用于python-pptx段落对象
-            # 首先获取文本框架(段落的父对象)
-            text_frame = paragraph._parent
-            # 然后获取形状(文本框架的父对象)
-            shape = text_frame._parent
-        except AttributeError:
-            pass
-
-        if shape is not None:
-            list_info = self._get_paragraph_list_info(shape, paragraph)
-            if not list_info["is_list"]:
-                return (False, "None")
-
+        shape = paragraph._parent._parent
+        list_info = self._get_paragraph_list_info(shape, paragraph)
+        if list_info["is_list"]:
             if list_info["attribute"] == "ordered":
                 return (True, "Numbered")
             return (True, "Bullet")
-
-        # 如果无法获取形状，使用更简单的检查方式
-        p = paragraph._element
-        if p.find(".//a:buChar", namespaces={"a": self.namespaces["a"]}) is not None:
-            return (True, "Bullet")
-        elif (
-            p.find(".//a:buAutoNum", namespaces={"a": self.namespaces["a"]}) is not None
-        ):
-            return (True, "Numbered")
-        elif paragraph.level > 0:
-            # 很可能是子列表项(缩进表示嵌套)
-            return (True, "None")
-        else:
-            return (False, "None")
+        return (False, "None")
 
     def _get_effective_list_marker(self, shape, paragraph) -> dict:
         """

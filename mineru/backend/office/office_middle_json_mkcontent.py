@@ -9,7 +9,6 @@ from mineru.backend.office.mkcontent.inline_renderer import (
 )
 from mineru.backend.office.mkcontent.output_builders import (
     get_body_data,
-    make_blocks_to_content_list,
     make_blocks_to_content_list_v2,
     merge_index_to_markdown,
     merge_list_to_markdown,
@@ -25,7 +24,6 @@ __all__ = [
     'get_title_level',
     'inline_left_delimiter',
     'inline_right_delimiter',
-    'make_blocks_to_content_list',
     'make_blocks_to_content_list_v2',
     'merge_index_to_markdown',
     'merge_list_to_markdown',

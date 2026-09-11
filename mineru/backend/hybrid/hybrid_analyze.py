@@ -2,7 +2,6 @@
 import asyncio
 import os
 import time
-from collections import defaultdict
 
 import cv2
 import numpy as np
@@ -63,7 +62,6 @@ from mineru.utils.pdfium_guard import (
     open_pdfium_document,
 )
 
-os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'  # 让mps可以fallback
 
 LAYOUT_BASE_BATCH_SIZE = 1
 MFR_BASE_BATCH_SIZE = 16

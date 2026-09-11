@@ -76,31 +76,42 @@ class IntelAccelerationContractTests(unittest.TestCase):
         self.assertEqual(providers[0][1]["device_type"], "NPU")
         self.assertEqual(providers[0][1]["precision"], "FP16")
 
-    def test_table_session_falls_back_to_cpu_when_openvino_compile_fails(self):
+    def test_table_cpu_provider_does_not_require_openvino(self):
+        with patch(
+            "mineru.model.table.rec.onnxruntime_provider.get_device",
+            return_value="cpu",
+        ), patch(
+            "mineru.model.table.rec.onnxruntime_provider.configured_openvino_device",
+            return_value=None,
+        ), patch(
+            "mineru.model.table.rec.onnxruntime_provider.ensure_openvino_runtime_libraries",
+        ) as ensure_runtime:
+            providers = build_table_onnx_providers(["CPUExecutionProvider"])
+
+        ensure_runtime.assert_not_called()
+        self.assertEqual(providers[0][0], "CPUExecutionProvider")
+
+    def test_table_session_surfaces_provider_compile_failure(self):
         calls = []
 
         def fake_session(model_path, *, sess_options=None, providers=None):
             calls.append((model_path, providers))
-            if providers[0][0] == "OpenVINOExecutionProvider":
-                raise RuntimeError("dynamic shape is not supported")
-            return "cpu-session"
+            raise RuntimeError("dynamic shape is not supported")
 
         with patch(
             "onnxruntime.InferenceSession",
             side_effect=fake_session,
         ):
-            session = create_table_onnx_session(
-                "table.onnx",
-                providers=[
-                    ("OpenVINOExecutionProvider", {"device_type": "GPU"}),
-                    ("CPUExecutionProvider", {}),
-                ],
-                model_name="SLANetPlus",
-            )
+            with self.assertRaisesRegex(RuntimeError, "dynamic shape"):
+                create_table_onnx_session(
+                    "table.onnx",
+                    providers=[
+                        ("OpenVINOExecutionProvider", {"device_type": "GPU"}),
+                    ],
+                )
 
-        self.assertEqual(session, "cpu-session")
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[-1][1][0][0], "CPUExecutionProvider")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][1][0][0], "OpenVINOExecutionProvider")
 
     def test_inactive_provider_is_observable(self):
         class Session:
@@ -109,7 +120,8 @@ class IntelAccelerationContractTests(unittest.TestCase):
                 return ["CPUExecutionProvider"]
 
         with patch.dict(os.environ, {"MINERU_OPENVINO_DEVICE": "GPU"}):
-            self.assertFalse(observe_openvino_provider(Session(), model_name="table"))
+            with self.assertRaisesRegex(RuntimeError, "did not activate"):
+                observe_openvino_provider(Session(), model_name="table")
 
 
 if __name__ == "__main__":

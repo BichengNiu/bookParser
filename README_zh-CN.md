@@ -349,7 +349,7 @@ mineru -p <input_path> -o <output_path> -b pipeline
 pip install -e ".[pipeline,intel]"
 ```
 
-在 Windows 上，`GPU`、`NPU` 是否可用由当前 OpenVINO 运行时实时检查；驱动未安装、设备不可见或运行时不匹配时，显式设备请求会直接报错。`auto` 会在无法加载 OpenVINO 时明确记录并退回 CPU-only，不会静默伪装成加速。可先检查设备：
+在 Windows 上，`GPU`、`NPU` 是否可用由当前 OpenVINO 运行时实时检查；驱动未安装、设备不可见或运行时不匹配时，显式设备请求会直接报错。`auto` 也需要加载 OpenVINO 来发现设备；运行时不可用时会直接报出可操作的错误，不会静默伪装成加速。可先检查设备：
 
 ```bash
 python -c "import openvino as ov; print(ov.Core().available_devices)"
@@ -370,7 +370,7 @@ mineru -p <input_path> -o <output_path> -b pipeline --devices cpu
 
 输入目录中的多个文件按“一个文件一个任务”进入动态队列，每个选定设备保持一个长期 worker；不会把单个 PDF 拆给多个设备。`--devices` 仅作用于本机启动的 `pipeline` 服务，配合 `--api-url` 时由远端服务自行决定设备。
 
-如需把模型转换失败或 ONNX Runtime provider 未激活视为错误，可设置 `MINERU_OPENVINO_STRICT=true`；默认模式会保留 CPU fallback，但会在日志中明确记录。
+模型转换失败或 ONNX Runtime provider 未激活会直接报错；当前版本不再提供 CPU fallback 或 `MINERU_OPENVINO_STRICT` 开关。
 
 当前 `mineru` 通过命令行支持本地 `PDF / 图片 / DOCX / PPTX / XLSX` 文件或目录输入，具体使用方法请参考[使用指南](https://opendatalab.github.io/MinerU/zh/usage/)。完整 CLI 操作手册见根目录的 [CLI_MANUAL.md](CLI_MANUAL.md)。
 

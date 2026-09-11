@@ -202,10 +202,9 @@ def resolve_auto_model_source() -> str:
         except Exception as exc:
             last_error = str(exc)
 
-    logger.warning(
-        f"Failed to access {HUGGINGFACE_MODELS_PAGE_URL}: {last_error}, fallback to modelscope."
+    raise RuntimeError(
+        f"Failed to access {HUGGINGFACE_MODELS_PAGE_URL}: {last_error}"
     )
-    return "modelscope"
 
 
 def resolve_model_source(model_source: str | None = None, allow_auto: bool = False) -> str:
@@ -220,14 +219,14 @@ def resolve_model_source(model_source: str | None = None, allow_auto: bool = Fal
             )
     if model_source is None:
         model_source = get_configured_model_source()
+        if isinstance(model_source, str) and model_source.strip().lower() == "auto":
+            allow_auto = True
     if model_source is None:
         model_source = "auto"
         allow_auto = True
 
     if not isinstance(model_source, str):
-        logger.warning(f"Unsupported model source type: {type(model_source)}, fallback to auto.")
-        model_source = "auto"
-        allow_auto = True
+        raise ValueError(f"Unsupported model source type: {type(model_source)}")
 
     normalized_model_source = model_source.strip().lower()
     if normalized_model_source == "local":
@@ -244,10 +243,10 @@ def resolve_model_source(model_source: str | None = None, allow_auto: bool = Fal
     if normalized_model_source in REMOTE_MODEL_SOURCES:
         return normalized_model_source
 
-    logger.warning(f"Unsupported model source: {model_source}, fallback to auto.")
-    resolved_model_source = resolve_auto_model_source()
-    persist_resolved_model_source(resolved_model_source)
-    return resolved_model_source
+    raise ValueError(
+        f"Unsupported model source: {model_source}. "
+        f"Choose local, {REMOTE_MODEL_SOURCES[0]}, or {REMOTE_MODEL_SOURCES[1]}"
+    )
 
 
 @lru_cache(maxsize=None)

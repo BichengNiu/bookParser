@@ -5,16 +5,11 @@ from typing import Any, List
 import numpy as np
 import pypdfium2 as pdfium
 import pypdfium2.raw as pdfium_c
-from pdftext.pdf.chars import deduplicate_chars, get_chars
+from pdftext.pdf.chars import PageChars, deduplicate_chars, get_chars
 from pdftext.pdf.pages import assign_scripts, get_blocks, get_lines, get_spans
 from pdftext.schema import Bbox
 
 from mineru.utils.pdfium_guard import close_pdfium_child, pdfium_guard
-
-try:
-    from pdftext.pdf.chars import PageChars
-except ImportError:
-    PageChars = None
 
 NEAR_IDENTICAL_CHAR_BBOX_TOLERANCE = 1.0
 OFFSET_DUPLICATE_CHAR_BBOX_TOLERANCE = 2.5
@@ -46,10 +41,9 @@ def get_page(
 
 
 def _get_char_bbox_coords(char: dict[str, Any]) -> tuple[float, ...]:
-    """统一提取字符 bbox 坐标，兼容 pdftext Bbox 对象和普通 list。"""
+    """Extract coordinates from the current pdftext Bbox object."""
     bbox = char.get("bbox")
-    bbox_coords = getattr(bbox, "bbox", bbox)
-    return tuple(float(coord) for coord in bbox_coords)
+    return tuple(float(coord) for coord in bbox.bbox)
 
 
 def _get_visible_char_signature(
@@ -167,13 +161,8 @@ def _iter_neighbor_bbox_bucket_keys(
             yield bucket_x + offset_x, bucket_y + offset_y
 
 
-def _is_pdftext_page_chars(chars: Any) -> bool:
-    """判断对象是否为 pdftext 0.7 引入的 PageChars 列式字符容器。"""
-    return PageChars is not None and isinstance(chars, PageChars)
-
-
-def _materialize_page_chars(chars) -> list[dict[str, Any]]:
-    """将 pdftext 0.7 的 PageChars 物化为 MinerU 既有 char dict 列表。"""
+def _page_chars_to_dicts(chars: PageChars) -> list[dict[str, Any]]:
+    """Convert the current pdftext PageChars container to mutable records."""
     boxes = chars.boxes.tolist()
     rotations = chars.rotations.tolist()
     font_ids = chars.font_ids.tolist()
@@ -189,13 +178,6 @@ def _materialize_page_chars(chars) -> list[dict[str, Any]]:
         }
         for index in range(len(chars))
     ]
-
-
-def _ensure_legacy_chars(chars) -> list[dict[str, Any]]:
-    """统一输出旧版 char dict 列表，隔离 pdftext 0.7 的返回结构变化。"""
-    if _is_pdftext_page_chars(chars):
-        return _materialize_page_chars(chars)
-    return chars
 
 
 def _restore_pdfium_surrogate_pairs(
@@ -277,7 +259,7 @@ def _restore_pdfium_surrogate_pairs(
 
 
 def _get_single_char_text(char: dict[str, Any]) -> str:
-    """提取单个 PDF 字符文本，异常空值用替换符保证 PageChars 长度一致。"""
+    """Extract one code point for the current PageChars representation."""
     text = char.get("char", "")
     if len(text) == 1:
         return text
@@ -289,7 +271,7 @@ def _get_char_font_id(
     fonts: list[dict[str, Any]],
     font_cache: dict[tuple[Any, Any, Any, Any], int],
 ) -> int:
-    """为旧版字符 font 生成 PageChars 需要的页内 font id。"""
+    """Build the current PageChars font table index."""
     font = char.get("font") or {}
     font_key = (
         font.get("name"),
@@ -312,19 +294,12 @@ def _get_char_font_id(
     return font_id
 
 
-def _get_char_index(char: dict[str, Any], fallback_idx: int) -> int:
-    """提取旧版字符索引，缺失或为空时回退到当前列表位置。"""
-    char_idx = char.get("char_idx")
-    if char_idx is None:
-        char_idx = fallback_idx
-    return int(char_idx)
+def _get_char_index(char: dict[str, Any]) -> int:
+    return int(char["char_idx"])
 
 
-def _legacy_chars_to_page_chars(chars):
-    """将旧版 char dict 列表打包回 pdftext 0.7 get_spans 所需的 PageChars。"""
-    if PageChars is None or _is_pdftext_page_chars(chars):
-        return chars
-
+def _dict_chars_to_page_chars(chars: list[dict[str, Any]]) -> PageChars:
+    """Pack the mutable records back into the current PageChars container."""
     fonts = []
     font_cache = {}
     text_parts = []
@@ -334,14 +309,14 @@ def _legacy_chars_to_page_chars(chars):
     font_ids = []
     char_indices = []
 
-    for fallback_idx, char in enumerate(chars):
+    for char in chars:
         char_text = _get_single_char_text(char)
         text_parts.append(char_text)
         codes.append(ord(char_text))
         rotations.append(float(char.get("rotation") or 0.0))
         boxes.append(_get_char_bbox_coords(char))
         font_ids.append(_get_char_font_id(char, fonts, font_cache))
-        char_indices.append(_get_char_index(char, fallback_idx))
+        char_indices.append(_get_char_index(char))
 
     return PageChars(
         "".join(text_parts),
@@ -409,11 +384,7 @@ def get_page_chars(
             page_width = math.ceil(abs(page_bbox[2] - page_bbox[0]))
             page_height = math.ceil(abs(page_bbox[1] - page_bbox[3]))
 
-            page_rotation = 0
-            try:
-                page_rotation = page.get_rotation()
-            except Exception:
-                pass
+            page_rotation = page.get_rotation()
 
             if page_char_count is None:
                 page_char_count = textpage.count_chars()
@@ -421,7 +392,7 @@ def get_page_chars(
             chars = deduplicate_chars(
                 get_chars(textpage, page_bbox, page_rotation, quote_loosebox)
             )
-            chars = _ensure_legacy_chars(chars)
+            chars = _page_chars_to_dicts(chars)
             chars = _restore_pdfium_surrogate_pairs(chars, textpage)
             chars = _deduplicate_near_identical_chars(chars)
     finally:
@@ -444,7 +415,7 @@ def get_lines_from_chars(
     line_distance_threshold: float = 0.1,
 ):
     """从已提取的字符构建 pdftext lines，避免重复读取 PDFium textpage。"""
-    chars = _legacy_chars_to_page_chars(chars)
+    chars = _dict_chars_to_page_chars(chars)
     spans = get_spans(
         chars,
         superscript_height_threshold=superscript_height_threshold,

@@ -153,12 +153,10 @@ class TSRUnet:
         components = _iter_connected_component_coords(tmp < 255)  # 8连通区域标记
         ceilboxes = min_area_rect_box_from_components(
             components,
-            False,
             tmp.shape[1],
             tmp.shape[0],
             filtersmall=True,
-            adjust_box=False,
-        )  # 最后一个参数改为False
+        )
         return np.array(ceilboxes)
 
     def cal_rotate_angle(self, tmp):

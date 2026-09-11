@@ -49,7 +49,6 @@ def regenerate_client_side_outputs(
     parse_dir = Path(parse_dir)
     middle_json_path = parse_dir / f"{doc_stem}_middle.json"
     markdown_path = parse_dir / f"{doc_stem}.md"
-    content_list_path = parse_dir / f"{doc_stem}_content_list.json"
     content_list_v2_path = parse_dir / f"{doc_stem}_content_list_v2.json"
 
     if not middle_json_path.exists():
@@ -79,10 +78,6 @@ def regenerate_client_side_outputs(
         encoding="utf-8",
     )
     _write_json(
-        content_list_path,
-        make_func(pdf_info, MakeMode.CONTENT_LIST, image_dir),
-    )
-    _write_json(
         content_list_v2_path,
         make_func(pdf_info, MakeMode.CONTENT_LIST_V2, image_dir),
     )
@@ -92,6 +87,5 @@ def regenerate_client_side_outputs(
     return (
         middle_json_path,
         markdown_path,
-        content_list_path,
         content_list_v2_path,
     )

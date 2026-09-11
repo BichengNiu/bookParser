@@ -2,7 +2,6 @@
 
 from PIL import Image
 from collections import defaultdict
-import inspect
 from typing import List, Dict
 import cv2
 import numpy as np
@@ -267,13 +266,10 @@ class MineruTableOrientationClsModel:
 
     @staticmethod
     def _set_progress_description(progress_bar, desc: str):
-        """切换复用进度条的阶段描述，并兼容测试替身和 tqdm 对象。"""
+        """切换复用进度条的阶段描述。"""
         if progress_bar is None:
             return
-        if hasattr(progress_bar, "set_description"):
-            progress_bar.set_description(desc)
-        else:
-            progress_bar.desc = desc
+        progress_bar.set_description(desc)
 
     @staticmethod
     def _extend_progress_total(progress_bar, count: int):
@@ -282,20 +278,7 @@ class MineruTableOrientationClsModel:
             return
         current_total = progress_bar.total if progress_bar.total is not None else progress_bar.n
         progress_bar.total = current_total + count
-        if hasattr(progress_bar, "refresh"):
-            progress_bar.refresh()
-
-    @classmethod
-    def _collect_portrait_image_groups(
-        cls,
-        imgs: List[Dict],
-        resolution_group_stride: int,
-    ) -> Dict[tuple[int, int], list[Dict]]:
-        """兼容旧私有入口，实际收集逻辑已不再按表格宽高比过滤。"""
-        return cls._collect_orientation_image_groups(
-            imgs,
-            resolution_group_stride,
-        )
+        progress_bar.refresh()
 
     @classmethod
     def _collect_orientation_image_groups(
@@ -370,33 +353,18 @@ class MineruTableOrientationClsModel:
         tqdm_desc: str = "OCR-det Predict",
         progress_bar=None,
     ):
-        """统一调用 OCR detector batch_predict，并兼容不支持进度参数的测试替身。"""
+        """统一调用 OCR detector batch_predict。"""
         if not img_list:
             return []
 
         max_batch_size = max(1, min(len(img_list), int(det_batch_size)))
-        batch_predict = self.ocr_engine.text_detector.batch_predict
-
-        progress_kwargs = {}
-        try:
-            signature = inspect.signature(batch_predict)
-            params = signature.parameters
-        except (TypeError, ValueError):
-            params = {}
-
-        if "tqdm_enable" in params:
-            progress_kwargs["tqdm_enable"] = tqdm_enable
-        if "tqdm_desc" in params:
-            progress_kwargs["tqdm_desc"] = tqdm_desc
-        if "tqdm_progress_bar" in params:
-            progress_kwargs["tqdm_progress_bar"] = progress_bar
-
-        batch_results = batch_predict(img_list, max_batch_size, **progress_kwargs)
-
-        if progress_bar is not None and "tqdm_progress_bar" not in progress_kwargs:
-            progress_bar.update(len(img_list))
-
-        return batch_results
+        return self.ocr_engine.text_detector.batch_predict(
+            img_list,
+            max_batch_size,
+            tqdm_enable=tqdm_enable,
+            tqdm_desc=tqdm_desc,
+            tqdm_progress_bar=progress_bar,
+        )
 
     def _detect_rotation_candidates(
         self,
@@ -537,7 +505,7 @@ class MineruTableOrientationClsModel:
         )
         self._extend_progress_total(progress_bar, len(all_crop_imgs))
         self._set_progress_description(progress_bar, f"{tqdm_desc} rec")
-        if progress_bar is not None and hasattr(progress_bar, "refresh"):
+        if progress_bar is not None:
             progress_bar.refresh()
         rec_res = self._recognize_orientation_crops(
             all_crop_imgs,
@@ -584,7 +552,7 @@ class MineruTableOrientationClsModel:
             )
             self._extend_progress_total(progress_bar, len(rotated_imgs))
             self._set_progress_description(progress_bar, f"{tqdm_desc} score")
-            if progress_bar is not None and hasattr(progress_bar, "refresh"):
+            if progress_bar is not None:
                 progress_bar.refresh()
             label_by_index = self._score_rotation_candidates(
                 rotated_imgs,
@@ -597,7 +565,7 @@ class MineruTableOrientationClsModel:
                 rotate_labels[index] = label
         finally:
             self._set_progress_description(progress_bar, tqdm_desc)
-            if progress_bar is not None and hasattr(progress_bar, "refresh"):
+            if progress_bar is not None:
                 progress_bar.refresh()
             if progress_bar is not None:
                 progress_bar.close()

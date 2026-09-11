@@ -14,7 +14,6 @@
 # limitations under the License.
 import numpy as np
 
-from .matcher_utils import compute_iou, distance
 
 
 TABLE_MATCH_CHUNK_SIZE = 256

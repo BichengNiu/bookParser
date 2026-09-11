@@ -2,7 +2,6 @@
 import click
 import sys
 
-from loguru import logger
 
 
 def vllm_server():
@@ -28,34 +27,23 @@ def lmdeploy_server():
 def openai_server(ctx, inference_engine):
     sys.argv = [sys.argv[0]] + ctx.args
     if inference_engine == 'auto':
-        try:
-            import vllm
+        from mineru.utils.engine_utils import get_vlm_engine
+
+        selected_engine = get_vlm_engine('auto')
+        if selected_engine == 'vllm-engine':
             inference_engine = 'vllm'
-            logger.info("Using vLLM as the inference engine for VLM server.")
-        except ImportError:
-            logger.info("vLLM not found, attempting to use LMDeploy as the inference engine for VLM server.")
-            try:
-                import lmdeploy
-                inference_engine = 'lmdeploy'
-            # Success message moved after successful import
-                logger.info("Using LMDeploy as the inference engine for VLM server.")
-            except ImportError:
-                logger.error("Neither vLLM nor LMDeploy is installed. Please install at least one of them.")
-                sys.exit(1)
+        elif selected_engine == 'lmdeploy-engine':
+            inference_engine = 'lmdeploy'
+        else:
+            raise RuntimeError(
+                f"VLM server does not support the selected engine: {selected_engine}"
+            )
 
     if inference_engine == 'vllm':
-        try:
-            import vllm
-        except ImportError:
-            logger.error("vLLM is not installed. Please install vLLM or choose LMDeploy as the inference engine.")
-            sys.exit(1)
+        import vllm  # noqa: F401
         vllm_server()
     elif inference_engine == 'lmdeploy':
-        try:
-            import lmdeploy
-        except ImportError:
-            logger.error("LMDeploy is not installed. Please install LMDeploy or choose vLLM as the inference engine.")
-            sys.exit(1)
+        import lmdeploy  # noqa: F401
         lmdeploy_server()
 
 if __name__ == "__main__":

@@ -56,19 +56,13 @@ def _build_media_path(img_buket_path: str, image_path: str) -> str:
 
 
 def _get_ordered_list_start(list_block):
-    """读取有序列表起始编号，兼容旧版数据缺少 start 字段的情况。"""
-    try:
-        return int(list_block.get('start', 1))
-    except (TypeError, ValueError):
-        return 1
+    """读取有序列表起始编号。"""
+    return int(list_block.get('start', 1))
 
 
 def _get_list_ilevel(list_block) -> int:
-    """安全读取 DOCX 列表原始 ilevel，异常值按顶层 0 处理。"""
-    try:
-        return int(list_block.get('ilevel', 0))
-    except (TypeError, ValueError):
-        return 0
+    """读取 DOCX 列表原始 ilevel。"""
+    return int(list_block.get('ilevel', 0))
 
 
 def _get_relative_list_ilevel(list_block, root_ilevel: int) -> int:
@@ -334,7 +328,7 @@ def _iter_body_spans(para_block, body_type: str, span_type: str):
 
 
 def _collect_caption_texts(para_block, caption_type: str) -> list[str]:
-    """收集 legacy markdown/content_list 使用的 caption 文本。"""
+    """收集 Markdown 使用的 caption 文本。"""
     return [
         merge_para_with_text(block)
         for block in _iter_child_blocks(para_block, caption_type)
@@ -431,103 +425,6 @@ def mk_blocks_to_markdown(para_blocks, make_mode, img_buket_path='', page_idx=No
             page_markdown.append(para_text.strip('\r\n'))
 
     return page_markdown
-
-
-def make_blocks_to_content_list(para_block, img_buket_path, page_idx):
-    para_type = para_block['type']
-    para_content = {}
-    if para_type in [
-        BlockType.TEXT,
-        BlockType.HEADER,
-        BlockType.FOOTER,
-        BlockType.PAGE_FOOTNOTE,
-    ]:
-        para_content = {
-            'type': para_type,
-            'text': merge_para_with_text(para_block),
-        }
-    elif para_type == BlockType.LIST:
-        para_content = {
-            'type': para_type,
-            'list_items': _flatten_list_items(para_block),
-        }
-    elif para_type == BlockType.INDEX:
-        para_content = {
-            'type': para_type,
-            'list_items': _flatten_index_items(para_block),
-        }
-    elif para_type == BlockType.TITLE:
-        title_level = get_title_level(para_block)
-        para_content = {
-            'type': ContentType.TEXT,
-            'text': merge_para_with_text(para_block),
-        }
-        if title_level != 0:
-            para_content['text_level'] = title_level
-    elif para_type == BlockType.INTERLINE_EQUATION:
-        para_content = {
-            'type': ContentType.EQUATION,
-            'text': merge_para_with_text(para_block),
-            'text_format': 'latex',
-        }
-    elif para_type == BlockType.IMAGE:
-        para_content = {'type': ContentType.IMAGE, 'img_path': '', BlockType.IMAGE_CAPTION: []}
-        for span in _iter_body_spans(
-            para_block,
-            BlockType.IMAGE_BODY,
-            ContentType.IMAGE,
-        ):
-            if span.get('image_path', ''):
-                para_content['img_path'] = f"{img_buket_path}/{span['image_path']}"
-        para_content[BlockType.IMAGE_CAPTION].extend(
-            _collect_caption_texts(para_block, BlockType.IMAGE_CAPTION)
-        )
-    elif para_type == BlockType.TABLE:
-        para_content = {'type': ContentType.TABLE, BlockType.TABLE_CAPTION: []}
-        for span in _iter_body_spans(
-            para_block,
-            BlockType.TABLE_BODY,
-            ContentType.TABLE,
-        ):
-            if span.get('html', ''):
-                para_content[BlockType.TABLE_BODY] = _format_embedded_html(
-                    span['html'],
-                    img_buket_path,
-                )
-        para_content[BlockType.TABLE_CAPTION].extend(
-            _collect_caption_texts(para_block, BlockType.TABLE_CAPTION)
-        )
-    elif para_type == BlockType.CHART:
-        para_content = {
-            'type': ContentType.CHART,
-            'img_path': '',
-            'content': '',
-            BlockType.CHART_CAPTION: [],
-        }
-        for span in _iter_body_spans(
-            para_block,
-            BlockType.CHART_BODY,
-            ContentType.CHART,
-        ):
-            para_content['img_path'] = _build_media_path(
-                img_buket_path,
-                span.get('image_path', ''),
-            )
-            if span.get('content', ''):
-                para_content['content'] = _format_embedded_html(
-                    span['content'],
-                    img_buket_path,
-                )
-        para_content[BlockType.CHART_CAPTION].extend(
-            _collect_caption_texts(para_block, BlockType.CHART_CAPTION)
-        )
-
-    para_content['page_idx'] = page_idx
-    anchor = para_block.get("anchor")
-    if isinstance(anchor, str) and anchor.strip():
-        para_content["anchor"] = anchor.strip()
-
-    return para_content
 
 
 def make_blocks_to_content_list_v2(para_block, img_buket_path):
@@ -769,13 +666,6 @@ def union_make(pdf_info_dict: list,
             page_markdown = mk_blocks_to_markdown(paras_of_layout, make_mode, img_buket_path,
                                                    page_idx=page_idx)
             output_content.extend(page_markdown)
-        elif make_mode == MakeMode.CONTENT_LIST:
-            para_blocks = (paras_of_layout or []) + (paras_of_discarded or [])
-            if not para_blocks:
-                continue
-            for para_block in para_blocks:
-                para_content = make_blocks_to_content_list(para_block, img_buket_path, page_idx)
-                output_content.append(para_content)
         elif make_mode == MakeMode.CONTENT_LIST_V2:
             # https://github.com/drunkpig/llm-webkit-mirror/blob/dev6/docs/specification/output_format/content_list_spec.md
             para_blocks = (paras_of_layout or []) + (paras_of_discarded or [])
@@ -788,6 +678,6 @@ def union_make(pdf_info_dict: list,
 
     if make_mode in [MakeMode.MM_MD, MakeMode.NLP_MD]:
         return '\n\n'.join(output_content)
-    elif make_mode in [MakeMode.CONTENT_LIST, MakeMode.CONTENT_LIST_V2]:
+    elif make_mode == MakeMode.CONTENT_LIST_V2:
         return output_content
     return None

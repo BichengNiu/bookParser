@@ -8,7 +8,6 @@ import re
 from PIL import Image, ImageOps
 from typing import List, Optional, Tuple, Union, Dict, Any
 
-from loguru import logger
 from tokenizers import AddedToken
 from tokenizers import Tokenizer as TokenizerFast
 
@@ -544,48 +543,6 @@ class UniMERNetDecode(object):
         generated_text = [self.post_process(text) for text in generated_text]
         return generated_text
 
-    def normalize(self, s: str) -> str:
-        """Normalizes a string by removing unnecessary spaces.
-
-        Args:
-            s (str): String to normalize.
-
-        Returns:
-            str: Normalized string.
-        """
-        text_reg = r"(\\(operatorname|mathrm|text|mathbf)\s?\*? {.*?})"
-        letter = "[a-zA-Z]"
-        noletter = r"[\W_^\d]"
-        names = []
-        for x in re.findall(text_reg, s):
-            pattern = r"(\\[a-zA-Z]+)\s(?=\w)|\\[a-zA-Z]+\s(?=})"
-            matches = re.findall(pattern, x[0])
-            for m in matches:
-                if (
-                        m
-                        not in [
-                    "\\operatorname",
-                    "\\mathrm",
-                    "\\text",
-                    "\\mathbf",
-                ]
-                        and m.strip() != ""
-                ):
-                    s = s.replace(m, m + "XXXXXXX")
-                    s = s.replace(" ", "")
-                    names.append(s)
-        if len(names) > 0:
-            s = re.sub(text_reg, lambda match: str(names.pop(0)), s)
-        news = s
-        while True:
-            s = news
-            news = re.sub(r"(?!\\ )(%s)\s+?(%s)" % (noletter, noletter), r"\1\2", s)
-            news = re.sub(r"(?!\\ )(%s)\s+?(%s)" % (noletter, letter), r"\1\2", news)
-            news = re.sub(r"(%s)\s+?(%s)" % (letter, noletter), r"\1\2", news)
-            if news == s:
-                break
-        return s.replace("XXXXXXX", " ")
-
     def remove_chinese_text_wrapping(self, formula):
         pattern = re.compile(r"\\text\s*{\s*([^}]*?[\u4e00-\u9fff]+[^}]*?)\s*}")
 
@@ -608,9 +565,7 @@ class UniMERNetDecode(object):
 
         text = self.remove_chinese_text_wrapping(text)
         text = fix_text(text)
-        # logger.debug(f"Text after ftfy fix: {text}")
         text = self.fix_latex(text)
-        # logger.debug(f"Text after LaTeX fix: {text}")
         return text
 
     def fix_latex(self, text: str) -> str:
@@ -626,7 +581,6 @@ class UniMERNetDecode(object):
         text = fix_latex_environments(text)
         text = remove_up_commands(text)
         text = remove_unsupported_commands(text)
-        # text = self.normalize(text)
         return text
 
     def __call__(

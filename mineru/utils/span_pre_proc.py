@@ -138,17 +138,14 @@ def _is_supported_rotation(rotation) -> bool:
 
 
 def _get_char_fill_key(char):
-    """生成字符回填判定 key，优先使用 pdftext 提供的页内 char_idx。"""
-    char_idx = char.get('char_idx')
-    if char_idx is not None:
-        return ('char_idx', char_idx)
-    return ('object_id', id(char))
+    """生成字符回填判定 key。"""
+    return ('char_idx', int(char['char_idx']))
 
 
 def _iter_line_chars(line):
-    """按 pdftext line/span 结构展开字符，兼容缺少 chars 字段的异常 span。"""
-    for span in line.get('spans', []):
-        for char in span.get('chars', []):
+    """按当前 pdftext line/span 结构展开字符。"""
+    for span in line['spans']:
+        for char in span['chars']:
             yield char
 
 

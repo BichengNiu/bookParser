@@ -2,8 +2,6 @@
 from pathlib import Path
 from typing import Any, List, Sequence, Tuple
 
-from loguru import logger
-
 from mineru.utils.config_reader import get_device
 from mineru.utils.intel_acceleration import (
     configured_openvino_device,
@@ -24,10 +22,13 @@ OPENVINO_PROVIDER = "OpenVINOExecutionProvider"
 
 
 def _normalize_device(device: object) -> str:
-    """归一化 MinerU 设备名，兼容 cuda:0 这类带索引的写法。"""
+    """归一化 MinerU 设备名。"""
     if not isinstance(device, str):
-        return ""
-    return device.split(":", 1)[0].strip().lower()
+        raise TypeError("Configured device must be a string")
+    normalized = device.strip().lower()
+    if not normalized:
+        raise ValueError("Configured device must not be empty")
+    return normalized
 
 
 def _build_cpu_provider() -> Tuple[str, dict[str, Any]]:
@@ -65,22 +66,19 @@ def build_table_onnx_providers(
 
     if openvino_device is not None and openvino_device != "CPU":
         ensure_openvino_runtime_libraries()
-        if OPENVINO_PROVIDER in available_providers:
-            return [_build_openvino_provider(openvino_device), cpu_provider]
-        logger.warning(
-            "OpenVINOExecutionProvider is unavailable for {}; using CPU "
-            "for table ONNX inference.",
-            openvino_device,
-        )
+        if OPENVINO_PROVIDER not in available_providers:
+            raise RuntimeError(
+                f"OpenVINOExecutionProvider is unavailable for {openvino_device}"
+            )
+        return [_build_openvino_provider(openvino_device)]
 
     # 只有 MinerU 设备明确为 CUDA 时才尝试 CUDAExecutionProvider，保持默认 CPU 行为。
     if device != "cuda":
         return [cpu_provider]
 
-    if CUDA_PROVIDER in available_providers:
-        return [cuda_provider, cpu_provider]
-
-    return [cpu_provider]
+    if CUDA_PROVIDER not in available_providers:
+        raise RuntimeError("CUDAExecutionProvider is unavailable for CUDA parsing")
+    return [cuda_provider]
 
 
 def create_table_onnx_session(
@@ -88,16 +86,8 @@ def create_table_onnx_session(
     *,
     sess_options: Any = None,
     providers: Sequence[Tuple[str, dict[str, Any]]] | None = None,
-    model_name: str = "table ONNX model",
 ):
-    """Create a table ONNX session with a safe Intel-provider fallback.
-
-    OpenVINO can reject an individual ONNX graph at compile time (for example
-    a dynamic-shape SLANet graph on some driver/runtime combinations).  That
-    must not tear down an entire document worker: the rest of the pipeline can
-    still run on the selected GPU/NPU while this optional table model falls
-    back to the native CPU execution provider.
-    """
+    """Create a table ONNX session using the selected provider only."""
 
     import onnxruntime
 
@@ -105,25 +95,8 @@ def create_table_onnx_session(
         providers
         or build_table_onnx_providers(onnxruntime.get_available_providers())
     )
-    try:
-        return onnxruntime.InferenceSession(
-            str(model_path),
-            sess_options=sess_options,
-            providers=selected,
-        )
-    except Exception as exc:
-        if not any(name == OPENVINO_PROVIDER for name, _ in selected):
-            raise
-
-        logger.warning(
-            "OpenVINO provider failed while loading {}; falling back to CPU "
-            "for {}: {}",
-            model_path,
-            model_name,
-            exc,
-        )
-        return onnxruntime.InferenceSession(
-            str(model_path),
-            sess_options=sess_options,
-            providers=[_build_cpu_provider()],
-        )
+    return onnxruntime.InferenceSession(
+        str(model_path),
+        sess_options=sess_options,
+        providers=selected,
+    )

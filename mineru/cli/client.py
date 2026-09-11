@@ -50,7 +50,7 @@ from mineru.cli.common import (
 )
 from mineru.cli import api_client as _api_client
 from mineru.cli.client_side_output import regenerate_client_side_outputs
-from mineru.cli.output_paths import resolve_parse_dir
+from mineru.cli.output_paths import build_parse_dir
 from mineru.cli.visualization import (
     VisualizationJob,
     run_visualization_job,
@@ -139,7 +139,7 @@ def normalize_ocr_lang_option(
     param: click.Parameter,
     value: str,
 ) -> str:
-    """校验 CLI OCR 语言参数，并将兼容别名归一到实际模型语言。"""
+    """校验 CLI OCR 语言参数。"""
     try:
         return validate_public_ocr_lang(value)
     except ValueError as exc:
@@ -425,22 +425,29 @@ def build_visualization_jobs(
     parse_method: str,
 ) -> list[VisualizationJob]:
     draw_span = backend.startswith("pipeline")
-    return [
-        VisualizationJob(
-            document_stem=document.stem,
-            backend=backend,
-            parse_method=parse_method,
-            parse_dir=resolve_parse_dir(
-                output_dir,
-                document.stem,
-                backend,
-                parse_method,
-                is_office=document.suffix in office_suffixes,
-            ),
-            draw_span=draw_span,
+    jobs = []
+    for document in planned_task.documents:
+        parse_dir = build_parse_dir(
+            output_dir,
+            document.stem,
+            backend,
+            parse_method,
+            is_office=document.suffix in office_suffixes,
         )
-        for document in planned_task.documents
-    ]
+        # The default output profile does not ship intermediate middle JSON,
+        # so there is nothing to visualize unless it was explicitly returned.
+        if not (parse_dir / f"{document.stem}_middle.json").exists():
+            continue
+        jobs.append(
+            VisualizationJob(
+                document_stem=document.stem,
+                backend=backend,
+                parse_method=parse_method,
+                parse_dir=parse_dir,
+                draw_span=draw_span,
+            )
+        )
+    return jobs
 
 
 def log_visualization_future_result(
@@ -697,7 +704,7 @@ def device_can_process_task(
 
     The current Intel NPU backend is reliable for image/OCR PDFs, but its
     OpenVINO OCR path can erase an existing PDF text layer.  GPU and CPU keep
-    the native text extraction path intact, so they remain valid fallbacks.
+    the native text extraction path intact, so they remain valid processing targets.
     """
     if spec.device is not PipelineDevice.NPU:
         return True
@@ -732,12 +739,12 @@ def build_request_form_data(
         start_page_id=start_page_id,
         end_page_id=end_page_id,
         return_md=return_md,
-        return_middle_json=True,
-        return_model_output=True,
+        return_middle_json=client_side_output_generation,
+        return_model_output=client_side_output_generation,
         return_content_list=return_content_list,
         return_images=True,
         response_format_zip=True,
-        return_original_file=True,
+        return_original_file=client_side_output_generation,
         client_side_output_generation=client_side_output_generation,
     )
 
@@ -904,7 +911,7 @@ async def run_planned_task(
     if client_side_output_generation:
         for document in planned_task.documents:
             # 解压后按现有 parse_dir 结构覆盖重生客户端最终输出产物。
-            parse_dir = resolve_parse_dir(
+            parse_dir = build_parse_dir(
                 output_dir,
                 document.stem,
                 backend,

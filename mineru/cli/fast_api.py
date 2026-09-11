@@ -13,7 +13,7 @@ from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Optional, Sequence
 
 import click
 import uvicorn
@@ -48,7 +48,7 @@ from mineru.cli.public_http_client_policy import (
     is_public_bind_host,
     warn_if_public_http_client_policy as _warn_if_public_http_client_policy,
 )
-from mineru.cli.output_paths import resolve_parse_dir
+from mineru.cli.output_paths import build_parse_dir
 from mineru.cli.api_protocol import (
     API_PROTOCOL_VERSION,
     DEFAULT_MAX_CONCURRENT_REQUESTS,
@@ -144,6 +144,7 @@ class AsyncParseTask:
     status: str
     backend: str
     file_names: list[str]
+    office_file_names: list[str]
     created_at: str
     output_dir: str
     effort: str
@@ -418,14 +419,21 @@ def normalize_lang_list(lang_list: list[str], file_count: int) -> list[str]:
     return [base_lang] * file_count
 
 
-def get_parse_dir(output_dir: str, pdf_name: str, backend: str, parse_method: str) -> str:
+def get_parse_dir(
+    output_dir: str,
+    pdf_name: str,
+    backend: str,
+    parse_method: str,
+    *,
+    is_office: bool = False,
+) -> str:
     return str(
-        resolve_parse_dir(
+        build_parse_dir(
             output_dir,
             pdf_name,
             backend,
             parse_method,
-            allow_office_fallback=True,
+            is_office=is_office,
         )
     )
 
@@ -444,14 +452,22 @@ def build_result_dict(
     return_model_output: bool,
     return_content_list: bool,
     return_images: bool,
+    office_file_names: Sequence[str] | None = None,
 ) -> dict[str, dict[str, Any]]:
     result_dict: dict[str, dict[str, Any]] = {}
+    office_file_name_set = set(office_file_names or ())
     for pdf_name in pdf_file_names:
         result_dict[pdf_name] = {}
         data = result_dict[pdf_name]
 
         try:
-            parse_dir = get_parse_dir(output_dir, pdf_name, backend, parse_method)
+            parse_dir = get_parse_dir(
+                output_dir,
+                pdf_name,
+                backend,
+                parse_method,
+                is_office=pdf_name in office_file_name_set,
+            )
         except ValueError:
             logger.warning(f"Unknown backend type: {backend}, skipping {pdf_name}")
             continue
@@ -467,7 +483,7 @@ def build_result_dict(
             data["model_output"] = get_infer_result("_model.json", pdf_name, parse_dir)
         if return_content_list:
             data["content_list"] = get_infer_result(
-                "_content_list.json", pdf_name, parse_dir
+                "_content_list_v2.json", pdf_name, parse_dir
             )
         if return_images:
             images_dir = os.path.join(parse_dir, "images")
@@ -500,14 +516,22 @@ def create_result_zip(
     return_content_list: bool,
     return_images: bool,
     return_original_file: bool,
+    office_file_names: Sequence[str] | None = None,
 ) -> str:
     zip_fd, zip_path = tempfile.mkstemp(suffix=".zip", prefix="mineru_results_")
     os.close(zip_fd)
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        office_file_name_set = set(office_file_names or ())
         for pdf_name in pdf_file_names:
             try:
-                parse_dir = get_parse_dir(output_dir, pdf_name, backend, parse_method)
+                parse_dir = get_parse_dir(
+                    output_dir,
+                    pdf_name,
+                    backend,
+                    parse_method,
+                    is_office=pdf_name in office_file_name_set,
+                )
             except ValueError:
                 logger.warning(f"Unknown backend type: {backend}, skipping {pdf_name}")
                 continue
@@ -552,17 +576,6 @@ def create_result_zip(
                     )
 
             if return_content_list:
-                path = os.path.join(parse_dir, f"{pdf_name}_content_list.json")
-                if os.path.exists(path):
-                    zf.write(
-                        path,
-                        arcname=build_zip_arcname(
-                            pdf_name,
-                            parse_dir,
-                            f"{pdf_name}_content_list.json",
-                        ),
-                    )
-
                 path = os.path.join(parse_dir, f"{pdf_name}_content_list_v2.json")
                 if os.path.exists(path):
                     zf.write(
@@ -630,6 +643,7 @@ async def build_result_response(
     response_format_zip: bool,
     return_original_file: bool,
     zip_filename: str = "results.zip",
+    office_file_names: Sequence[str] | None = None,
 ) -> Response:
     if response_format_zip:
         zip_task = asyncio.create_task(
@@ -645,6 +659,7 @@ async def build_result_response(
                 return_content_list=return_content_list,
                 return_images=return_images,
                 return_original_file=return_original_file,
+                office_file_names=office_file_names,
             )
         )
         try:
@@ -671,6 +686,7 @@ async def build_result_response(
         return_model_output=return_model_output,
         return_content_list=return_content_list,
         return_images=return_images,
+        office_file_names=office_file_names,
     )
     return JSONResponse(
         status_code=status_code,
@@ -713,6 +729,7 @@ async def build_sync_file_parse_response(
             return_images=task.return_images,
             response_format_zip=task.response_format_zip,
             return_original_file=task.return_original_file,
+            office_file_names=task.office_file_names,
             zip_filename=f"{task.task_id}.zip",
         )
         response.headers[FILE_PARSE_TASK_ID_HEADER] = task.task_id
@@ -732,6 +749,7 @@ async def build_sync_file_parse_response(
         return_model_output=task.return_model_output,
         return_content_list=task.return_content_list,
         return_images=task.return_images,
+        office_file_names=task.office_file_names,
     )
     return JSONResponse(
         status_code=200,
@@ -886,11 +904,17 @@ async def create_async_parse_task(
         uploads = await save_upload_files(uploads_dir, request_options.files)
         request_options.files.clear()
         file_names = [upload.stem for upload in uploads]
+        office_file_names = [
+            upload.stem
+            for upload in uploads
+            if guess_suffix_by_path(upload.path) in office_suffixes
+        ]
         task = AsyncParseTask(
             task_id=task_id,
             status=TASK_PENDING,
             backend=request_options.backend,
             file_names=file_names,
+            office_file_names=office_file_names,
             created_at=utc_now_iso(),
             output_dir=task_output_dir,
             effort=request_options.effort,
@@ -1345,6 +1369,7 @@ async def get_async_task_result(
         return_images=task.return_images,
         response_format_zip=task.response_format_zip,
         return_original_file=task.return_original_file,
+        office_file_names=task.office_file_names,
         zip_filename=f"{task.task_id}.zip",
     )
 

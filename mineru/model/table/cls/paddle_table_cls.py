@@ -5,7 +5,6 @@ from PIL import Image
 import cv2
 import numpy as np
 import onnxruntime
-from loguru import logger
 from tqdm import tqdm
 
 from mineru.backend.pipeline.model_list import AtomicModel
@@ -15,7 +14,6 @@ from mineru.model.table.rec.onnxruntime_provider import (
 )
 from mineru.utils.enum_class import ModelPath
 from mineru.utils.intel_acceleration import (
-    ensure_openvino_runtime_libraries,
     observe_openvino_provider,
 )
 from mineru.utils.models_download_utils import auto_download_and_get_model_root_path
@@ -23,7 +21,6 @@ from mineru.utils.models_download_utils import auto_download_and_get_model_root_
 
 class PaddleTableClsModel:
     def __init__(self):
-        ensure_openvino_runtime_libraries()
         model_path = os.path.join(
             auto_download_and_get_model_root_path(ModelPath.paddle_table_cls),
             ModelPath.paddle_table_cls,
@@ -33,7 +30,6 @@ class PaddleTableClsModel:
             providers=build_table_onnx_providers(
                 onnxruntime.get_available_providers()
             ),
-            model_name="PaddleTableClsModel",
         )
         observe_openvino_provider(self.sess, model_name="PaddleTableClsModel")
         self.less_length = 256

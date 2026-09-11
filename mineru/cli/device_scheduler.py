@@ -58,10 +58,8 @@ def resolve_device_specs(
 ) -> tuple[DeviceWorkerSpec, ...]:
     """Resolve and validate the requested CPU/GPU/NPU worker set.
 
-    ``auto`` means every device visible to the current runtime.  If the Intel
-    extra is not installed, it deliberately resolves to a native CPU worker
-    so existing CPU-only pipeline installations keep working.  Missing
-    GPU/NPU devices are a startup error when explicitly requested.
+    ``auto`` means every device visible to the current runtime. Missing
+    GPU/NPU devices are a startup error.
     """
 
     is_auto = False
@@ -104,15 +102,7 @@ def resolve_device_specs(
     if available is not None:
         infos = tuple(available)
     elif requires_openvino:
-        try:
-            infos = query_openvino_devices()
-        except RuntimeError as exc:
-            if not is_auto or "not installed" not in str(exc).lower():
-                raise
-            logger.warning(
-                "OpenVINO is unavailable; --devices auto will use native CPU only."
-            )
-            infos = ()
+        infos = query_openvino_devices()
     else:
         infos = ()
 

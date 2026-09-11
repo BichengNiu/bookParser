@@ -89,7 +89,6 @@ class ContentTypeV2:
 class MakeMode:
     MM_MD = 'mm_markdown'
     NLP_MD = 'nlp_markdown'
-    CONTENT_LIST = 'content_list'
     CONTENT_LIST_V2 = 'content_list_v2'
 
 

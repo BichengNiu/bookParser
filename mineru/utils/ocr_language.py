@@ -48,58 +48,6 @@ PUBLIC_OCR_LANGUAGE_CHOICES = tuple(
 
 PUBLIC_OCR_LANGUAGE_SCHEMA_EXTRA = {"items": {"enum": list(PUBLIC_OCR_LANGUAGES)}}
 
-_ARABIC_LANG_ALIASES = {"ar", "fa", "ug", "ur", "ps", "ku", "sd", "bal"}
-_CH_LANG_ALIASES = {"en", "japan", "chinese_cht", "latin"}
-_EAST_SLAVIC_LANG_ALIASES = {"ru", "be", "uk"}
-_CYRILLIC_LANG_ALIASES = {
-    "rs_cyrillic",
-    "bg",
-    "mn",
-    "abq",
-    "ady",
-    "kbd",
-    "ava",
-    "dar",
-    "inh",
-    "che",
-    "lbe",
-    "lez",
-    "tab",
-    "kk",
-    "ky",
-    "tg",
-    "mk",
-    "tt",
-    "cv",
-    "ba",
-    "mhr",
-    "mo",
-    "udm",
-    "kv",
-    "os",
-    "bua",
-    "xal",
-    "tyv",
-    "sah",
-    "kaa",
-}
-_DEVANAGARI_LANG_ALIASES = {
-    "hi",
-    "mr",
-    "ne",
-    "bh",
-    "mai",
-    "ang",
-    "bho",
-    "mah",
-    "sck",
-    "new",
-    "gom",
-    "sa",
-    "bgc",
-}
-
-
 def format_public_ocr_lang_description() -> str:
     """生成公开 API 使用的 OCR 语言说明，避免入口文案各自维护。"""
     option_lines = [
@@ -114,9 +62,7 @@ def format_public_ocr_lang_description() -> str:
 
 
 def validate_public_ocr_lang(lang: str) -> str:
-    """校验公开入口允许的 OCR 语言，并将兼容入口规范到实际模型 key。"""
-    if lang in _CH_LANG_ALIASES:
-        return "ch"
+    """校验公开入口允许的 OCR 语言。"""
     if lang not in PUBLIC_OCR_LANGUAGES:
         raise ValueError(
             f"Language {lang} not supported. Allowed values: "
@@ -141,17 +87,6 @@ def normalize_ocr_model_lang(
     normalized_lang = lang or "ch"
     if device == "cpu" and normalized_lang == "seal":
         normalized_lang = "seal_lite"
-    elif normalized_lang in _CH_LANG_ALIASES:
-        normalized_lang = "ch"
-    elif normalized_lang in _EAST_SLAVIC_LANG_ALIASES:
-        normalized_lang = "east_slavic"
-    elif normalized_lang in _ARABIC_LANG_ALIASES:
-        normalized_lang = "arabic"
-    elif normalized_lang in _CYRILLIC_LANG_ALIASES:
-        normalized_lang = "cyrillic"
-    elif normalized_lang in _DEVANAGARI_LANG_ALIASES:
-        normalized_lang = "devanagari"
-
     if supported_langs is not None and normalized_lang not in supported_langs:
         raise ValueError(f"Language {lang} not supported")
     return normalized_lang

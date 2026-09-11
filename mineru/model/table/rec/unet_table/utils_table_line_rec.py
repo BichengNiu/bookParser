@@ -64,68 +64,6 @@ def _iter_connected_component_coords(binary_mask: np.ndarray) -> Iterator[Connec
         )
 
 
-def transform_preds(coords, center, scale, output_size, rot=0):
-    target_coords = np.zeros(coords.shape)
-    trans = get_affine_transform(center, scale, rot, output_size, inv=1)
-    for p in range(coords.shape[0]):
-        target_coords[p, 0:2] = affine_transform(coords[p, 0:2], trans)
-    return target_coords
-
-
-def get_affine_transform(
-    center, scale, rot, output_size, shift=np.array([0, 0], dtype=np.float32), inv=0
-):
-    if not isinstance(scale, np.ndarray) and not isinstance(scale, list):
-        scale = np.array([scale, scale], dtype=np.float32)
-
-    scale_tmp = scale
-    src_w = scale_tmp[0]
-    dst_w = output_size[0]
-    dst_h = output_size[1]
-
-    rot_rad = np.pi * rot / 180
-    src_dir = get_dir([0, src_w * -0.5], rot_rad)
-    dst_dir = np.array([0, dst_w * -0.5], np.float32)
-
-    src = np.zeros((3, 2), dtype=np.float32)
-    dst = np.zeros((3, 2), dtype=np.float32)
-    src[0, :] = center + scale_tmp * shift
-    src[1, :] = center + src_dir + scale_tmp * shift
-    dst[0, :] = [dst_w * 0.5, dst_h * 0.5]
-    dst[1, :] = np.array([dst_w * 0.5, dst_h * 0.5], np.float32) + dst_dir
-
-    src[2:, :] = get_3rd_point(src[0, :], src[1, :])
-    dst[2:, :] = get_3rd_point(dst[0, :], dst[1, :])
-
-    if inv:
-        trans = cv2.getAffineTransform(np.float32(dst), np.float32(src))
-    else:
-        trans = cv2.getAffineTransform(np.float32(src), np.float32(dst))
-
-    return trans
-
-
-def affine_transform(pt, t):
-    new_pt = np.array([pt[0], pt[1], 1.0], dtype=np.float32).T
-    new_pt = np.dot(t, new_pt)
-    return new_pt[:2]
-
-
-def get_dir(src_point, rot_rad):
-    sn, cs = np.sin(rot_rad), np.cos(rot_rad)
-
-    src_result = [0, 0]
-    src_result[0] = src_point[0] * cs - src_point[1] * sn
-    src_result[1] = src_point[0] * sn + src_point[1] * cs
-
-    return src_result
-
-
-def get_3rd_point(a, b):
-    direct = a - b
-    return b + np.array([-direct[1], direct[0]], dtype=np.float32)
-
-
 def get_table_line(binimg, axis=0, lineW=10):
     ##获取表格线
     ##axis=0 横线
@@ -344,50 +282,10 @@ def line_to_line(points1, points2, alpha=10, angle=30):
     return points1
 
 
-def min_area_rect_box(
-    regions, flag=True, W=0, H=0, filtersmall=False, adjust_box=False
-):
-    """
-    多边形外接矩形
-    """
-    boxes = []
-    for region in regions:
-        region_bbox_area = getattr(region, "bbox_area", None)
-        if region_bbox_area is None:
-            region_bbox_area = region.area_bbox
-        if region_bbox_area > H * W * 3 / 4:  # 过滤大的单元格
-            continue
-        rect = cv2.minAreaRect(region.coords[:, ::-1])
-
-        box = cv2.boxPoints(rect)
-        box = box.reshape((8,)).tolist()
-        box = image_location_sort_box(box)
-        x1, y1, x2, y2, x3, y3, x4, y4 = box
-        angle, w, h, cx, cy = calculate_center_rotate_angle(box)
-        # if adjustBox:
-        #     x1, y1, x2, y2, x3, y3, x4, y4 = xy_rotate_box(cx, cy, w + 5, h + 5, angle=0, degree=None)
-        #     x1, x4 = max(x1, 0), max(x4, 0)
-        #     y1, y2 = max(y1, 0), max(y2, 0)
-
-        # if w > 32 and h > 32 and flag:
-        #     if abs(angle / np.pi * 180) < 20:
-        #         if filtersmall and (w < 10 or h < 10):
-        #             continue
-        #         boxes.append([x1, y1, x2, y2, x3, y3, x4, y4])
-        # else:
-        if w * h < 0.5 * W * H:
-            if filtersmall and (
-                w < 15 or h < 15
-            ):  # or w / h > 30 or h / w > 30): # 过滤小的单元格
-                continue
-            boxes.append([x1, y1, x2, y2, x3, y3, x4, y4])
-    return boxes
-
-
 def min_area_rect_box_from_components(
-    components, flag=True, W=0, H=0, filtersmall=False, adjust_box=False
+    components, W=0, H=0, *, filtersmall=False
 ):
-    """对 OpenCV 连通域组件执行与 min_area_rect_box 相同的过滤和外接框计算。"""
+    """对 OpenCV 连通域组件执行过滤并计算外接框。"""
     boxes = []
     for component in components:
         if component.bbox_area > H * W * 3 / 4:  # 过滤大的单元格
@@ -398,7 +296,7 @@ def min_area_rect_box_from_components(
         box = box.reshape((8,)).tolist()
         box = image_location_sort_box(box)
         x1, y1, x2, y2, x3, y3, x4, y4 = box
-        angle, w, h, cx, cy = calculate_center_rotate_angle(box)
+        _, w, h, _, _ = calculate_center_rotate_angle(box)
         if w * h < 0.5 * W * H:
             if filtersmall and (
                 w < 15 or h < 15

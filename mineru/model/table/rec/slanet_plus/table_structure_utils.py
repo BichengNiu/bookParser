@@ -20,7 +20,6 @@ import cv2
 import numpy as np
 from onnxruntime import (
     GraphOptimizationLevel,
-    InferenceSession,
     SessionOptions,
     get_available_providers,
 )
@@ -31,7 +30,6 @@ from ..onnxruntime_provider import (
     create_table_onnx_session,
 )
 from mineru.utils.intel_acceleration import (
-    ensure_openvino_runtime_libraries,
     observe_openvino_provider,
 )
 
@@ -39,8 +37,6 @@ from mineru.utils.intel_acceleration import (
 class OrtInferSession:
     def __init__(self, config: Dict[str, Any]):
         self.logger = logger
-
-        ensure_openvino_runtime_libraries()
 
         model_path = config.get("model_path", None)
         self._verify_model(model_path)
@@ -53,7 +49,6 @@ class OrtInferSession:
             model_path,
             sess_options=sess_opt,
             providers=EP_list,
-            model_name="SLANetPlus",
         )
         observe_openvino_provider(self.session, model_name="SLANetPlus")
 
@@ -94,18 +89,6 @@ class OrtInferSession:
     def get_input_names(self) -> List[str]:
         return [v.name for v in self.session.get_inputs()]
 
-    def get_output_names(self) -> List[str]:
-        return [v.name for v in self.session.get_outputs()]
-
-    def get_character_list(self, key: str = "character") -> List[str]:
-        meta_dict = self.session.get_modelmeta().custom_metadata_map
-        return meta_dict[key].splitlines()
-
-    def have_key(self, key: str = "character") -> bool:
-        meta_dict = self.session.get_modelmeta().custom_metadata_map
-        if key in meta_dict.keys():
-            return True
-        return False
 
     @staticmethod
     def _verify_model(model_path: Union[str, Path, None]):

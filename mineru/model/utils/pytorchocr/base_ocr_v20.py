@@ -69,10 +69,7 @@ class BaseOCRV20:
             from safetensors.torch import load_file
 
             return load_file(str(weights_path), device="cpu")
-        try:
-            return torch.load(weights_path, map_location="cpu", weights_only=True)
-        except TypeError:
-            return torch.load(weights_path, map_location="cpu")
+        return torch.load(weights_path, map_location="cpu", weights_only=True)
 
     @staticmethod
     def _normalize_ppocrv6_state_dict(weights, weights_path):
@@ -87,7 +84,7 @@ class BaseOCRV20:
         }
 
     def read_pytorch_weights(self, weights_path):
-        """读取 PyTorch OCR 权重，并兼容 PP-OCRv6 safetensors。"""
+        """读取 PyTorch OCR 权重或 PP-OCRv6 safetensors。"""
         if not os.path.exists(weights_path):
             raise FileNotFoundError('{} is not existed.'.format(weights_path))
         weights = self._load_weight_file(weights_path)
@@ -109,7 +106,7 @@ class BaseOCRV20:
         # print('weights is loaded.')
 
     def load_pytorch_weights(self, weights_path):
-        """加载 PyTorch OCR 权重，按后缀兼容 safetensors。"""
+        """加载 PyTorch OCR 权重或 safetensors。"""
         self.net.load_state_dict(self.read_pytorch_weights(weights_path))
         # print('model is loaded: {}'.format(weights_path))
 
