@@ -325,10 +325,6 @@ logger.add(_stderr_sink, level=log_level)
 def build_http_timeout() -> httpx.Timeout:
     return _api_client.build_http_timeout()
 
-def find_free_port() -> int:
-    return _api_client.find_free_port()
-
-
 def normalize_base_url(url: str) -> str:
     return _api_client.normalize_base_url(url)
 
@@ -512,14 +508,6 @@ async def wait_for_visualization_jobs(
             )
     finally:
         visualization_context.executor.shutdown(wait=True)
-
-
-def response_detail(response: httpx.Response) -> str:
-    return _api_client.response_detail(response)
-
-
-def validate_server_health_payload(payload: dict, base_url: str) -> ServerHealth:
-    return _api_client.validate_server_health_payload(payload, base_url)
 
 
 async def fetch_server_health(
@@ -1343,6 +1331,17 @@ async def run_orchestrated_cli(
     Adapted only for the case where the backend is set to 'hybrid-*'.""",
 )
 @click.option(
+    "--vlm-engine",
+    "vlm_engine",
+    type=click.Choice(["auto", "transformers", "lmdeploy", "vllm", "vllm-async"]),
+    default="auto",
+    show_default=True,
+    help=(
+        "VLM engine for hybrid/vlm engine backends. auto uses the platform default; "
+        "an explicit engine is strict and never falls back."
+    ),
+)
+@click.option(
     "-l",
     "--lang",
     "lang",
@@ -1428,6 +1427,7 @@ def main(
     method: str,
     backend: str,
     effort: str,
+    vlm_engine: str,
     lang: str,
     server_url: Optional[str],
     start_page_id: int,
@@ -1437,6 +1437,8 @@ def main(
     image_analysis: bool,
     client_side_output_generation: bool,
 ) -> None:
+    if vlm_engine != "auto":
+        os.environ["MINERU_VLM_ENGINE"] = vlm_engine
     asyncio.run(
         run_orchestrated_cli(
             input_path=input_path,

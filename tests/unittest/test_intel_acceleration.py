@@ -11,6 +11,7 @@ from mineru.utils.intel_acceleration import (
     observe_openvino_provider,
     validate_openvino_device,
 )
+from mineru.utils.model_utils import get_vram
 from mineru.model.table.rec.onnxruntime_provider import (
     build_table_onnx_providers,
     create_table_onnx_session,
@@ -75,6 +76,35 @@ class IntelAccelerationContractTests(unittest.TestCase):
         self.assertEqual(providers[0][0], "OpenVINOExecutionProvider")
         self.assertEqual(providers[0][1]["device_type"], "NPU")
         self.assertEqual(providers[0][1]["precision"], "FP16")
+
+    def test_table_provider_honors_explicit_cpu_override(self):
+        with patch(
+            "mineru.model.table.rec.onnxruntime_provider.get_device",
+            return_value="cpu",
+        ), patch(
+            "mineru.model.table.rec.onnxruntime_provider.configured_openvino_device",
+            return_value="GPU",
+        ), patch(
+            "mineru.model.table.rec.onnxruntime_provider.configured_openvino_table_device",
+            return_value="CPU",
+        ):
+            providers = build_table_onnx_providers(
+                ["OpenVINOExecutionProvider", "CPUExecutionProvider"]
+            )
+        self.assertEqual(providers, [("CPUExecutionProvider", {"arena_extend_strategy": "kSameAsRequested"})])
+
+    def test_openvino_gpu_memory_is_used_when_torch_device_is_cpu(self):
+        with patch.dict(
+            os.environ,
+            {"MINERU_OPENVINO_DEVICE": "GPU"},
+            clear=True,
+        ), patch("mineru.utils.model_utils.torch.cuda.is_available", return_value=False), patch(
+            "openvino.Core"
+        ) as core:
+            core.return_value.get_property.return_value = (
+                "Intel(R) Arc(TM) 130T GPU (16GB) (iGPU)"
+            )
+            self.assertEqual(get_vram("cpu"), 16)
 
     def test_table_cpu_provider_does_not_require_openvino(self):
         with patch(

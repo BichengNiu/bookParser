@@ -20,6 +20,7 @@ from loguru import logger
 
 
 OPENVINO_DEVICE_ENV = "MINERU_OPENVINO_DEVICE"
+OPENVINO_TABLE_DEVICE_ENV = "MINERU_OPENVINO_TABLE_DEVICE"
 OPENVINO_CACHE_DIR_ENV = "MINERU_OPENVINO_CACHE_DIR"
 OPENVINO_SKIP_MODELS_ENV = "MINERU_OPENVINO_SKIP_MODELS"
 EXPERIMENTAL_NPU_ENV = "MINERU_ENABLE_EXPERIMENTAL_NPU"
@@ -97,6 +98,15 @@ def configured_openvino_device() -> str | None:
     return normalize_openvino_device(value)
 
 
+def configured_openvino_table_device() -> str | None:
+    """Return the explicit table ONNX device override, if configured."""
+
+    value = os.getenv(OPENVINO_TABLE_DEVICE_ENV)
+    if value is not None and value.strip():
+        return normalize_openvino_device(value)
+    return configured_openvino_device()
+
+
 def _device_matches(requested: str, available: str) -> bool:
     if requested == available:
         return True
@@ -157,10 +167,15 @@ def ensure_openvino_runtime_libraries() -> Path | None:
     return libs_dir
 
 
-def observe_openvino_provider(session: Any, *, model_name: str) -> bool:
+def observe_openvino_provider(
+    session: Any,
+    *,
+    model_name: str,
+    target_device: str | None = None,
+) -> bool:
     """Log whether an ONNX Runtime session actually activated OpenVINO."""
 
-    target = configured_openvino_device()
+    target = target_device if target_device is not None else configured_openvino_device()
     if target is None or target == "CPU":
         return True
 

@@ -1,6 +1,7 @@
 # Copyright (c) Opendatalab. All rights reserved.
 import math
 import os
+import re
 import time
 import gc
 from PIL import Image
@@ -249,5 +250,26 @@ def get_vram(device) -> int:
     elif str(device).startswith("sdaa"):
         if torch.sdaa.is_available():
             total_memory = round(torch.sdaa.get_device_properties(device).total_memory / (1024 ** 3))  # 转为 GB          
+
+    # OpenVINO devices are not exposed through torch.cuda.  On Intel Arc the
+    # available capacity is included in FULL_DEVICE_NAME (for example,
+    # ``Intel(R) Arc(TM) 130T GPU (16GB) (iGPU)``).  Without this branch the
+    # pipeline always falls back to 1 GB and selects the smallest batch size.
+    openvino_device = os.getenv("MINERU_OPENVINO_DEVICE", "")
+    memory_device = str(device).upper()
+    if memory_device not in {"GPU", "NPU"} and openvino_device.strip():
+        memory_device = openvino_device.strip().upper()
+
+    if total_memory == 1 and memory_device in {"GPU", "NPU"}:
+        try:
+            from openvino import Core
+
+            full_name = str(Core().get_property(memory_device, "FULL_DEVICE_NAME"))
+            match = re.search(r"\((\d+(?:\.\d+)?)\s*GB\)", full_name, re.IGNORECASE)
+            if match:
+                total_memory = max(1, round(float(match.group(1))))
+        except Exception:
+            # OpenVINO is optional; preserve the historical 1 GB fallback.
+            pass
 
     return total_memory

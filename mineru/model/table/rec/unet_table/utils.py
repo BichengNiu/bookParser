@@ -20,6 +20,7 @@ from ..onnxruntime_provider import (
     create_table_onnx_session,
 )
 from mineru.utils.intel_acceleration import (
+    configured_openvino_table_device,
     observe_openvino_provider,
 )
 
@@ -42,7 +43,11 @@ class OrtInferSession:
             sess_options=sess_opt,
             providers=EP_list,
         )
-        observe_openvino_provider(self.session, model_name="UNetTable")
+        observe_openvino_provider(
+            self.session,
+            model_name="UNetTable",
+            target_device=configured_openvino_table_device(),
+        )
 
     @staticmethod
     def _init_sess_opts(config: Dict[str, Any]) -> SessionOptions:

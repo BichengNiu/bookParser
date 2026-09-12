@@ -5,6 +5,7 @@ from typing import Any, List, Sequence, Tuple
 from mineru.utils.config_reader import get_device
 from mineru.utils.intel_acceleration import (
     configured_openvino_device,
+    configured_openvino_table_device,
     ensure_openvino_runtime_libraries,
     openvino_cache_dir,
 )
@@ -63,6 +64,10 @@ def build_table_onnx_providers(
     cuda_provider = _build_cuda_provider()
     device = _normalize_device(get_device())
     openvino_device = configured_openvino_device()
+    table_device = configured_openvino_table_device()
+
+    if table_device == "CPU":
+        return [cpu_provider]
 
     if openvino_device is not None and openvino_device != "CPU":
         ensure_openvino_runtime_libraries()

@@ -1,8 +1,18 @@
 # Copyright (c) Opendatalab. All rights reserved.
+import os
+
 from loguru import logger
 
 from mineru.utils.check_sys_env import is_mac_os_version_supported, is_windows_environment, is_mac_environment, \
     is_linux_environment
+
+SUPPORTED_VLM_ENGINE_NAMES = {
+    "transformers",
+    "lmdeploy",
+    "vllm",
+    "vllm-async",
+    "mlx",
+}
 
 
 def get_vlm_engine(inference_engine: str, is_async: bool = False) -> str:
@@ -16,6 +26,15 @@ def get_vlm_engine(inference_engine: str, is_async: bool = False) -> str:
     Returns:
         最终选择的引擎名称
     """
+    if inference_engine == 'auto':
+        configured_engine = os.getenv("MINERU_VLM_ENGINE", "").strip()
+        if configured_engine:
+            inference_engine = configured_engine
+
+    if inference_engine != "auto" and inference_engine not in SUPPORTED_VLM_ENGINE_NAMES:
+        allowed = ", ".join(sorted(SUPPORTED_VLM_ENGINE_NAMES))
+        raise ValueError(f"Unsupported VLM engine '{inference_engine}'. Choose one of: {allowed}")
+
     if inference_engine == 'auto':
         # 根据操作系统自动选择引擎
         if is_windows_environment():

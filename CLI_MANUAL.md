@@ -98,6 +98,7 @@ mineru -p ./documents -o ./output
 | `-m, --method [auto\|txt\|ocr]` | 解析方法；默认 `auto`，主要用于 `pipeline` 与 `hybrid-*` 后端 |
 | `-b, --backend TEXT` | 解析后端；默认 `hybrid-engine` |
 | `--effort [medium\|high]` | `hybrid-*` 后端的解析强度；默认 `medium` |
+| `--vlm-engine [auto\|transformers\|lmdeploy\|vllm\|vllm-async]` | VLM/Hybrid 的本地推理引擎；默认 `auto`。显式选择后严格执行，缺少依赖直接失败，不会回退到其他后端 |
 | `-l, --lang TEXT` | 文档语言，主要用于提升 `pipeline` OCR 准确率；默认 `ch` |
 | `-u, --url TEXT` | `vlm-http-client` 或 `hybrid-http-client` 使用的 OpenAI 兼容服务地址 |
 | `-s, --start INTEGER` | PDF 起始页，从 `0` 开始；默认 `0` |
@@ -143,6 +144,16 @@ mineru -p input.pdf -o output -b hybrid-engine --effort high --image-analysis tr
 ```
 
 `medium` 更快；`high` 通常更慢，但支持更完整的图片/图表分析。`hybrid` 的 `medium` 强度会自动关闭图片/图表分析。
+
+如果当前平台没有自动选择所需的引擎，可以显式指定引擎。例如 Windows 上使用 Transformers：
+
+```powershell
+mineru -p input.pdf -o output -b hybrid-engine --effort medium --vlm-engine transformers
+```
+
+`--vlm-engine` 是严格选择，不会把失败的 Hybrid 任务改走 `pipeline`、CPU 或其他引擎；对应 VLM 模型必须已经可下载或已配置在本地。
+
+`pipeline --devices gpu` 也严格使用 OpenVINO GPU；GPU 不支持某个模型时直接报错，不会自动把该模型切到 CPU。
 
 ### 5.3 `vlm-engine`：本地 VLM 解析
 

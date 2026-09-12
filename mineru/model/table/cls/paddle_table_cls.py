@@ -14,6 +14,7 @@ from mineru.model.table.rec.onnxruntime_provider import (
 )
 from mineru.utils.enum_class import ModelPath
 from mineru.utils.intel_acceleration import (
+    configured_openvino_table_device,
     observe_openvino_provider,
 )
 from mineru.utils.models_download_utils import auto_download_and_get_model_root_path
@@ -31,7 +32,11 @@ class PaddleTableClsModel:
                 onnxruntime.get_available_providers()
             ),
         )
-        observe_openvino_provider(self.sess, model_name="PaddleTableClsModel")
+        observe_openvino_provider(
+            self.sess,
+            model_name="PaddleTableClsModel",
+            target_device=configured_openvino_table_device(),
+        )
         self.less_length = 256
         self.cw, self.ch = 224, 224
         self.std = [0.229, 0.224, 0.225]

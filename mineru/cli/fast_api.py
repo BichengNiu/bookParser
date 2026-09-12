@@ -43,6 +43,18 @@ from mineru.cli.common import (
     uniquify_task_stems,
 )
 from mineru.cli.api_request import ParseRequestOptions, parse_request_form
+from mineru.cli.task_runtime import (
+    TASK_COMPLETED,
+    TASK_FAILED,
+    TASK_PENDING,
+    TASK_PROCESSING,
+    build_upload_destination,
+    env_flag_enabled,
+    get_task_cleanup_interval_seconds,
+    get_task_retention_seconds,
+    is_task_terminal,
+    utc_now_iso,
+)
 from mineru.cli.public_http_client_policy import (
     configure_public_http_client_policy,
     is_public_bind_host,
@@ -75,15 +87,8 @@ log_level = os.getenv("MINERU_LOG_LEVEL", "INFO").upper()
 logger.remove()
 logger.add(sys.stderr, level=log_level)
 
-TASK_PENDING = "pending"
-TASK_PROCESSING = "processing"
-TASK_COMPLETED = "completed"
-TASK_FAILED = "failed"
-TASK_TERMINAL_STATES = {TASK_COMPLETED, TASK_FAILED}
 SUPPORTED_UPLOAD_SUFFIXES = pdf_suffixes + image_suffixes + office_suffixes
 RESULT_IMAGE_SUFFIXES = set(image_suffixes) | {"svg"}
-DEFAULT_TASK_RETENTION_SECONDS = 24 * 60 * 60
-DEFAULT_TASK_CLEANUP_INTERVAL_SECONDS = 5 * 60
 DEFAULT_OUTPUT_ROOT = "./output"
 FILE_PARSE_TASK_ID_HEADER = "X-MinerU-Task-Id"
 FILE_PARSE_TASK_STATUS_HEADER = "X-MinerU-Task-Status"
@@ -95,13 +100,6 @@ MINERU_API_ALLOW_PUBLIC_HTTP_CLIENT_ENV = "MINERU_API_ALLOW_PUBLIC_HTTP_CLIENT"
 # 并发控制器
 _request_semaphore: Optional[asyncio.Semaphore] = None
 _configured_max_concurrent_requests = 1
-
-
-def env_flag_enabled(name: str, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.lower() in ("1", "true", "yes", "on")
 
 
 def is_main_multiprocessing_process() -> bool:
@@ -301,38 +299,8 @@ def shutdown_runtime_resources() -> None:
         logger.warning(f"Failed to shutdown PDF render executor: {exc}")
 
 
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def get_int_env(name: str, default: int, minimum: int = 0) -> int:
-    try:
-        value = int(os.getenv(name, str(default)))
-    except ValueError:
-        return default
-    if value < minimum:
-        return default
-    return value
-
-
 def get_max_concurrent_requests() -> int:
     return _configured_max_concurrent_requests
-
-
-def get_task_retention_seconds() -> int:
-    return get_int_env(
-        "MINERU_API_TASK_RETENTION_SECONDS",
-        DEFAULT_TASK_RETENTION_SECONDS,
-        minimum=0,
-    )
-
-
-def get_task_cleanup_interval_seconds() -> int:
-    return get_int_env(
-        "MINERU_API_TASK_CLEANUP_INTERVAL_SECONDS",
-        DEFAULT_TASK_CLEANUP_INTERVAL_SECONDS,
-        minimum=1,
-    )
 
 
 def get_output_root() -> Path:
@@ -359,21 +327,6 @@ def cleanup_file(file_path: str) -> None:
                 shutil.rmtree(file_path)
     except Exception as e:
         logger.warning(f"fail clean file {file_path}: {e}")
-
-
-def build_upload_destination(upload_dir: str, filename: str) -> Path:
-    destination = Path(upload_dir) / filename
-    if not destination.exists():
-        return destination
-
-    base_name = Path(filename).stem
-    suffix = Path(filename).suffix
-    index = 2
-    while True:
-        candidate = Path(upload_dir) / f"{base_name}__upload_{index}{suffix}"
-        if not candidate.exists():
-            return candidate
-        index += 1
 
 
 def encode_image(image_path: str) -> str:
@@ -436,10 +389,6 @@ def get_parse_dir(
             is_office=is_office,
         )
     )
-
-
-def is_task_terminal(status: str) -> bool:
-    return status in TASK_TERMINAL_STATES
 
 
 def build_result_dict(

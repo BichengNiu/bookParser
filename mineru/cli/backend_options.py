@@ -22,14 +22,6 @@ HTTP_CLIENT_BACKEND_CHOICES = (
 PUBLIC_BACKEND_CHOICES = LOCAL_BACKEND_CHOICES + HTTP_CLIENT_BACKEND_CHOICES
 BACKEND_SCHEMA_EXTRA = {"enum": list(PUBLIC_BACKEND_CHOICES)}
 HYBRID_EFFORT_SCHEMA_EXTRA = {"enum": list(HYBRID_EFFORT_CHOICES)}
-def get_backend_choices(include_http_client: bool = True) -> list[str]:
-    """按入口配置返回公开 backend 选项，避免各入口重复维护字符串列表。"""
-    choices = list(LOCAL_BACKEND_CHOICES)
-    if include_http_client:
-        choices.extend(HTTP_CLIENT_BACKEND_CHOICES)
-    return choices
-
-
 def normalize_backend(backend: str) -> str:
     """将旧 backend 别名规范为当前公开名称，并校验最终名称是否合法。"""
     if backend not in PUBLIC_BACKEND_CHOICES:

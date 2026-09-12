@@ -43,6 +43,20 @@ from mineru.cli.api_client import (
 from mineru.cli.api_protocol import API_PROTOCOL_VERSION
 from mineru.cli.api_request import ParseRequestOptions, parse_request_form
 from mineru.cli.common import normalize_upload_filename
+from mineru.cli.task_runtime import (
+    DEFAULT_TASK_CLEANUP_INTERVAL_SECONDS,
+    DEFAULT_TASK_RETENTION_SECONDS,
+    TASK_FAILED,
+    TASK_PENDING,
+    TASK_PROCESSING,
+    TASK_TERMINAL_STATES,
+    build_upload_destination,
+    env_flag_enabled,
+    get_task_cleanup_interval_seconds,
+    get_task_retention_seconds,
+    is_task_terminal,
+    utc_now_iso,
+)
 from mineru.cli.public_http_client_policy import (
     configure_public_http_client_policy,
     is_public_bind_host,
@@ -52,13 +66,6 @@ from mineru.cli.public_http_client_policy import (
 from mineru.cli.vlm_preload import build_local_api_cli_args
 from mineru.version import __version__
 
-TASK_PENDING = "pending"
-TASK_PROCESSING = "processing"
-TASK_COMPLETED = "completed"
-TASK_FAILED = "failed"
-TASK_TERMINAL_STATES = {TASK_COMPLETED, TASK_FAILED}
-DEFAULT_TASK_RETENTION_SECONDS = 24 * 60 * 60
-DEFAULT_TASK_CLEANUP_INTERVAL_SECONDS = 5 * 60
 FILE_PARSE_TASK_ID_HEADER = "X-MinerU-Task-Id"
 FILE_PARSE_TASK_STATUS_HEADER = "X-MinerU-Task-Status"
 FILE_PARSE_TASK_STATUS_URL_HEADER = "X-MinerU-Task-Status-Url"
@@ -78,27 +85,6 @@ MINERU_ROUTER_PUBLIC_BIND_EXPOSED_ENV = "MINERU_ROUTER_PUBLIC_BIND_EXPOSED"
 MINERU_ROUTER_ALLOW_PUBLIC_HTTP_CLIENT_ENV = "MINERU_ROUTER_ALLOW_PUBLIC_HTTP_CLIENT"
 
 
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def env_flag_enabled(name: str, default: bool = False) -> bool:
-    value = os.getenv(name)
-    if value is None:
-        return default
-    return value.lower() in ("1", "true", "yes", "on")
-
-
-def get_int_env(name: str, default: int, minimum: int = 0) -> int:
-    try:
-        value = int(os.getenv(name, str(default)))
-    except ValueError:
-        return default
-    if value < minimum:
-        return default
-    return value
-
-
 def _parse_json_object_response(
     response: httpx.Response,
     payload_name: str,
@@ -110,26 +96,6 @@ def _parse_json_object_response(
     if not isinstance(payload, dict):
         raise ValueError(f"{payload_name} must be a JSON object")
     return payload
-
-
-def get_task_retention_seconds() -> int:
-    return get_int_env(
-        "MINERU_API_TASK_RETENTION_SECONDS",
-        DEFAULT_TASK_RETENTION_SECONDS,
-        minimum=0,
-    )
-
-
-def get_task_cleanup_interval_seconds() -> int:
-    return get_int_env(
-        "MINERU_API_TASK_CLEANUP_INTERVAL_SECONDS",
-        DEFAULT_TASK_CLEANUP_INTERVAL_SECONDS,
-        minimum=1,
-    )
-
-
-def is_task_terminal(status: str) -> bool:
-    return status in TASK_TERMINAL_STATES
 
 
 def warn_if_public_http_client_policy(host: str, allow_public_http_client: bool) -> None:
@@ -1038,21 +1004,6 @@ class UpstreamSubmissionRejected(RuntimeError):
         self.status_code = status_code
         self.detail = detail
         super().__init__(detail)
-
-
-def build_upload_destination(upload_dir: str, filename: str) -> Path:
-    destination = Path(upload_dir) / filename
-    if not destination.exists():
-        return destination
-
-    base_name = Path(filename).stem
-    suffix = Path(filename).suffix
-    index = 2
-    while True:
-        candidate = Path(upload_dir) / f"{base_name}__upload_{index}{suffix}"
-        if not candidate.exists():
-            return candidate
-        index += 1
 
 
 async def stage_multipart_request(request: Request) -> MultipartPayload:
