@@ -1430,6 +1430,7 @@ def main(
             port=port,
             reload=True,
             access_log=access_log,
+            log_level=log_level.lower(),
         )
     else:
         config = uvicorn.Config(
@@ -1438,6 +1439,7 @@ def main(
             port=port,
             reload=False,
             access_log=access_log,
+            log_level=log_level.lower(),
         )
         server = uvicorn.Server(config)
         install_stdin_shutdown_watcher(server)
